@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration (machine-specific)
+local.properties
+
+# Android SDK installed locally for CLI-only builds
+.android-sdk/
+
+# Freebuff client session database
+.freebuff/
+
+# IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# Logs
+*.log
