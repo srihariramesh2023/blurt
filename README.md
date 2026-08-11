@@ -9,7 +9,8 @@ with a dark-first, Apple-inspired design language.
 - **Capture**: blurts of three types — Text, Idea, Link — with a quick
   capture surface on Home.
 - **Library**: every blurt, newest first.
-- **Search**: live local keyword search across your blurts.
+- **Search**: semantic search by meaning (Gemini's free embedding tier),
+  with live keyword search as the always-on fallback.
 - **Authentication**: Google Sign-In only (Firebase Auth). Sessions persist
   between launches; the app never shows the login screen to a signed-in user.
 - **Data isolation**: every blurt is owned by the signed-in user's UID and
@@ -146,7 +147,30 @@ devices back into the local database. Deletes are tombstoned (`deleted: true`)
 so they propagate; conflicts resolve last-write-wins by `updatedAt`, with an
 un-uploaded local edit always winning.
 
-### 4. Session behavior
+### 4. Semantic search — enable the free Gemini tier
+
+Search is **meaning-based** when a Gemini API key is supplied at build time:
+blurts are embedded once and ranked by similarity, so "trip to the beach"
+finds a note that says "vacation in Goa" even though no word matches. Without
+a key — or when offline or rate-limited — search transparently falls back to
+plain keyword matching, so search never breaks.
+
+- [ ] Create a **free** API key at <https://aistudio.google.com/apikey>
+- [ ] Add it to your gitignored `local.properties` (project root):
+      ```properties
+      gemini.apiKey=AIza…
+      ```
+      (or export `GEMINI_API_KEY` in the build environment)
+- [ ] Rebuild: `./gradlew assembleDebug`
+
+How it works: on the first search, every capture is embedded (batched, 100 per
+call) with `gemini-embedding-001` and cached locally in Room — new or edited
+blurts are embedded lazily on demand. Vectors are scoped to the signed-in
+user, live in the app database, and are dropped on sign-out. The key is
+embedded in the APK (it's a free-tier, rate-limited key) — restrict it to your
+app's package and SHA-1 in Google Cloud if you distribute widely.
+
+### 5. Session behavior
 
 - **Persistence**: Firebase restores the signed-in session on launch. The app
   observes the auth state with a live listener, so the login screen never

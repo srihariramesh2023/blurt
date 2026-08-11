@@ -7,13 +7,18 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [CaptureEntity::class],
-    version = 4,
+    entities = [CaptureEntity::class, EmbeddingEntity::class],
+    version = 5,
     exportSchema = false,
 )
-@TypeConverters(CaptureTypeConverter::class, SyncStateConverter::class)
+@TypeConverters(
+    CaptureTypeConverter::class,
+    SyncStateConverter::class,
+    EmbeddingConverter::class,
+)
 abstract class BlurtDatabase : RoomDatabase() {
     abstract fun captureDao(): CaptureDao
+    abstract fun embeddingDao(): EmbeddingDao
 
     companion object {
         /**
@@ -70,6 +75,28 @@ abstract class BlurtDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE captures_new RENAME TO captures")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+            }
+        }
+
+        /**
+         * v4 → v5: adds the local semantic-search cache. Each capture's
+         * Gemini embedding lives in its own table so blurts are embedded once
+         * and reused; vectors are scoped by owner like everything else.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `capture_embeddings` (" +
+                        "`captureId` INTEGER NOT NULL PRIMARY KEY, " +
+                        "`ownerId` TEXT NOT NULL, " +
+                        "`embedding` BLOB NOT NULL, " +
+                        "`model` TEXT NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_capture_embeddings_ownerId " +
+                        "ON capture_embeddings(ownerId)"
+                )
             }
         }
     }

@@ -21,3 +21,20 @@ class SyncStateConverter {
     @TypeConverter
     fun toState(name: String): SyncState = SyncState.valueOf(name)
 }
+
+class EmbeddingConverter {
+    /** 3072 floats ≈ 12 KB per row — a compact binary blob is the right shape. */
+    @TypeConverter
+    fun fromFloats(values: FloatArray): ByteArray = ByteArray(values.size * 4).also { bytes ->
+        val buf = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        values.forEach(buf::putFloat)
+    }
+
+    @TypeConverter
+    fun toFloats(bytes: ByteArray): FloatArray {
+        val buf = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val out = FloatArray(bytes.size / 4)
+        for (i in out.indices) out[i] = buf.getFloat()
+        return out
+    }
+}

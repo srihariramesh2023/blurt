@@ -143,6 +143,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_1_2,
                 BlurtDatabase.MIGRATION_2_3,
                 BlurtDatabase.MIGRATION_3_4,
+                BlurtDatabase.MIGRATION_4_5,
             )
             .build()
         val repository = CaptureRepository(database.captureDao())
@@ -190,6 +191,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_1_2,
                 BlurtDatabase.MIGRATION_2_3,
                 BlurtDatabase.MIGRATION_3_4,
+                BlurtDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -215,6 +217,56 @@ class CaptureMigrationTest {
         assertTrue("syncState index missing after migration", found)
     }
 
+    private fun v4Schema() = createDatabaseAt(4) {
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `captures` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`ownerId` TEXT, " +
+                "`remoteId` TEXT, " +
+                "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                "`content` TEXT NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`deletedAt` INTEGER, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+        execSQL(
+            "INSERT INTO `captures` (ownerId, remoteId, syncState, content, type, createdAt, updatedAt) " +
+                "VALUES ('uid-existing-user', 'remote-1', 'SYNCED', 'kept note', 'TEXT', 1000, 1000)"
+        )
+    }
+
+    @Test
+    fun migrate4To5_addsEmbeddingsTableKeepsCaptures() = runTest {
+        v4Schema().use { v4 ->
+            BlurtDatabase.MIGRATION_4_5.migrate(v4)
+            v4.version = 5
+        }
+
+        val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
+            .addMigrations(BlurtDatabase.MIGRATION_4_5)
+            .build()
+
+        // Room validates the new schema — the embeddings table must exist with
+        // the exact columns Room expects.
+        val cursor = database.openHelper.writableDatabase.query(
+            "SELECT captureId, ownerId, model FROM capture_embeddings",
+        )
+        assertTrue(cursor.count == 0) // empty cache, but the table exists
+        cursor.close()
+
+        // Existing captures are untouched.
+        val repo = CaptureRepository(database.captureDao())
+        val all = repo.observeAll("uid-existing-user").first()
+        assertEquals(1, all.size)
+        assertEquals("kept note", all.single().content)
+        assertEquals("remote-1", all.single().remoteId)
+
+        database.close()
+    }
+
     @Test
     fun migrate3To4_dropsImageColumnsAndConvertsImageRowsToText() = runTest {
         v3Schema().use { v3 ->
@@ -223,7 +275,10 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_3_4)
+            .addMigrations(
+                BlurtDatabase.MIGRATION_3_4,
+                BlurtDatabase.MIGRATION_4_5,
+            )
             .build()
 
         val columns = columnNames(database.openHelper.writableDatabase)

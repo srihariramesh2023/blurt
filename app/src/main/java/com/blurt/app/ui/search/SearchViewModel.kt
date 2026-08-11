@@ -7,9 +7,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.blurt.app.BlurtApp
+import com.blurt.app.ai.SemanticSearchEngine
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
+import com.blurt.app.data.local.toDomain
 import com.blurt.app.data.model.Capture
+import com.blurt.app.util.escapeLikePattern
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,18 +23,23 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Live local keyword search across the signed-in user's blurts, updating as
- * the query changes. (Semantic search layers on top of this.)
+ * Search with a meaning layer: semantic (Gemini vector) search first, plain
+ * keyword search as the fallback whenever semantic is unavailable — no key
+ * configured, offline, quota hit. The fallback keeps search alive in every
+ * case, and both paths stay scoped to the signed-in user.
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class SearchViewModel(
     private val repository: CaptureRepository,
     private val authState: StateFlow<AuthState>,
+    private val semanticSearch: SemanticSearchEngine?,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -45,7 +53,15 @@ class SearchViewModel(
             when {
                 uid == null -> flowOf(emptyList())
                 query.isBlank() -> flowOf(emptyList())
-                else -> repository.search(query, uid)
+                else -> flow {
+                    val semantic = semanticSearch?.let {
+                        withTimeoutOrNull(SEARCH_TIMEOUT_MS) { it.search(query, uid) }
+                    }
+                    emit(
+                        if (semantic != null) semantic.map { it.toDomain() }
+                        else repository.searchOnce(query.escapeLikePattern(), uid)
+                    )
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -63,12 +79,15 @@ class SearchViewModel(
     }
 
     companion object {
+        private const val SEARCH_TIMEOUT_MS = 8_000L
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as BlurtApp
                 SearchViewModel(
                     repository = app.container.captureRepository,
                     authState = app.container.authRepository.authState,
+                    semanticSearch = app.container.semanticSearch,
                 )
             }
         }

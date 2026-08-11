@@ -36,6 +36,10 @@ class CaptureRepository(
     fun search(query: String, ownerId: String): Flow<List<Capture>> =
         dao.search(query.escapeLikePattern(), ownerId).map { list -> list.map(CaptureEntity::toDomain) }
 
+    /** One-shot keyword search — the fallback when semantic search is down. */
+    suspend fun searchOnce(query: String, ownerId: String): List<Capture> =
+        dao.searchOnce(query.escapeLikePattern(), ownerId).map(CaptureEntity::toDomain)
+
     suspend fun create(ownerId: String, type: CaptureType, content: String): Long {
         val now = System.currentTimeMillis()
         return dao.insert(

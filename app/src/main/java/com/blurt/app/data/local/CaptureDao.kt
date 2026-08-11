@@ -30,6 +30,14 @@ interface CaptureDao {
     )
     fun search(query: String, ownerId: String): Flow<List<CaptureEntity>>
 
+    /** One-shot keyword search — the fallback when semantic search is down. */
+    @Query(
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+            "AND content LIKE '%' || :query || '%' " +
+            "ESCAPE '\\' COLLATE NOCASE ORDER BY createdAt DESC, id DESC"
+    )
+    suspend fun searchOnce(query: String, ownerId: String): List<CaptureEntity>
+
     @Insert
     suspend fun insert(capture: CaptureEntity): Long
 

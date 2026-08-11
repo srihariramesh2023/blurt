@@ -47,6 +47,23 @@ val ksKeyPassword = signingProperty("keyPassword", "KEY_PASSWORD")
 val hasReleaseSigning = keystoreFile != null && keystoreFile.exists() &&
     ksStorePassword != null && ksKeyAlias != null && ksKeyPassword != null
 
+// --- Semantic search (Gemini free tier) --------------------------------------
+// The Gemini API key is supplied at build time from local.properties
+// (gemini.apiKey), a gradle property, or the GEMINI_API_KEY environment
+// variable — never from the repo. A blank key disables semantic search and
+// the app falls back to plain keyword search, so the project always builds.
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val geminiApiKeyRaw = localProperties.getProperty("gemini.apiKey")
+    ?: keystoreProperties.getProperty("gemini.apiKey")
+    ?: (project.findProperty("GEMINI_API_KEY") as String?)
+    ?: System.getenv("GEMINI_API_KEY")
+val geminiApiKey = (geminiApiKeyRaw ?: "").trim()
+fun String.kotlinLiteral(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.blurt.app"
     compileSdk = 35
@@ -57,6 +74,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "GEMINI_API_KEY", geminiApiKey.kotlinLiteral())
     }
 
     signingConfigs {
@@ -94,6 +112,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
