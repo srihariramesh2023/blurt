@@ -45,13 +45,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.BlurtTopBar
@@ -222,19 +220,6 @@ private fun DetailContent(
             )
         }
         Spacer(Modifier.height(24.dp))
-
-        if (capture.type == CaptureType.IMAGE && capture.imageForDisplay != null && !isEditing) {
-            AsyncImage(
-                model = capture.imageForDisplay,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .clip(RoundedCornerShape(24.dp)),
-            )
-            Spacer(Modifier.height(20.dp))
-        }
 
         if (isEditing) {
             TextField(

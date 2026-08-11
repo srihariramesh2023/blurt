@@ -6,8 +6,7 @@ package com.blurt.app.data.model
 enum class CaptureType(val label: String) {
     TEXT("Text"),
     IDEA("Idea"),
-    LINK("Link"),
-    IMAGE("Image");
+    LINK("Link");
 
     companion object {
         /** Resolves a nav-route slug like "text" or "link" to a type, defaulting to TEXT. */

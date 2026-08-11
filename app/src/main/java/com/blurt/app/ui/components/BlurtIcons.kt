@@ -50,15 +50,6 @@ object BlurtIcons {
         )
     }
 
-    /** Photo glyph for image captures. */
-    val Image: ImageVector by lazy {
-        icon(
-            name = "Image",
-            pathData = "M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0" +
-                "2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z",
-        )
-    }
-
     private fun icon(name: String, pathData: String): ImageVector =
         ImageVector.Builder(
             name = name,
@@ -77,5 +68,4 @@ fun typeIcon(type: CaptureType): ImageVector = when (type) {
     CaptureType.TEXT -> BlurtIcons.Quote
     CaptureType.IDEA -> BlurtIcons.Idea
     CaptureType.LINK -> BlurtIcons.Link
-    CaptureType.IMAGE -> BlurtIcons.Image
 }

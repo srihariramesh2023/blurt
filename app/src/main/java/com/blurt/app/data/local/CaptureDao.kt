@@ -71,8 +71,8 @@ interface CaptureDao {
     @Query("UPDATE captures SET remoteId = :remoteId WHERE id = :id")
     suspend fun assignRemoteId(id: Long, remoteId: String)
 
-    @Query("UPDATE captures SET syncState = 'SYNCED', imageUrl = COALESCE(:imageUrl, imageUrl) WHERE remoteId = :remoteId AND deletedAt IS NULL")
-    suspend fun markSynced(remoteId: String, imageUrl: String?)
+    @Query("UPDATE captures SET syncState = 'SYNCED' WHERE remoteId = :remoteId AND deletedAt IS NULL")
+    suspend fun markSynced(remoteId: String)
 
     @Query("UPDATE captures SET deletedAt = :deletedAt WHERE id = :id")
     suspend fun tombstone(id: Long, deletedAt: Long)

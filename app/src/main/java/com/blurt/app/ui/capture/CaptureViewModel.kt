@@ -1,6 +1,5 @@
 package com.blurt.app.ui.capture
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -31,9 +30,6 @@ class CaptureViewModel(
     private val _content = MutableStateFlow("")
     val content: StateFlow<String> = _content.asStateFlow()
 
-    private val _imageUri = MutableStateFlow<Uri?>(null)
-    val imageUri: StateFlow<Uri?> = _imageUri.asStateFlow()
-
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -48,11 +44,6 @@ class CaptureViewModel(
 
     fun onContentChange(text: String) {
         _content.value = text
-        _error.value = null
-    }
-
-    fun onImagePicked(uri: Uri) {
-        _imageUri.value = uri
         _error.value = null
     }
 
@@ -72,12 +63,6 @@ class CaptureViewModel(
                     _error.value = "That doesn't look like a valid link."
                     return
                 }
-
-            CaptureType.IMAGE ->
-                if (_imageUri.value == null) {
-                    _error.value = "Choose an image."
-                    return
-                }
         }
 
         viewModelScope.launch {
@@ -87,11 +72,9 @@ class CaptureViewModel(
                 return@launch
             }
             try {
-                val id = repository.create(uid, type, content, _imageUri.value)
+                val id = repository.create(uid, type, content)
                 _saved.value = id
             } catch (e: Exception) {
-                // Copying the picked image into app storage can fail (e.g. the
-                // source vanished); surface it instead of crashing.
                 _error.value = "Couldn't save. Try again."
             }
         }

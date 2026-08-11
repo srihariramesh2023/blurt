@@ -75,7 +75,7 @@ fun LibraryScreen(
             EmptyState(
                 icon = BlurtIcons.BlurtMark,
                 title = "No captures yet",
-                body = "Your blurts — text, ideas, links and images — will live here.",
+                body = "Your blurts — text, ideas and links — will live here.",
             )
             TextButton(onClick = onCaptureNew, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text(

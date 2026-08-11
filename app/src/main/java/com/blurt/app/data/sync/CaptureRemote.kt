@@ -1,6 +1,5 @@
 package com.blurt.app.data.sync
 
-import java.io.File
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -24,12 +23,6 @@ interface CaptureRemote {
      * Idempotent.
      */
     suspend fun deleteCapture(uid: String, remoteId: String)
-
-    /**
-     * Uploads a local image file to Storage and returns its download URL.
-     * Path `users/{uid}/images/{remoteId}/{fileName}` — private to the owner.
-     */
-    suspend fun uploadImage(uid: String, remoteId: String, file: File): String
 
     /** Live stream of the user's capture documents. */
     fun observeAll(uid: String): Flow<List<RemoteCapture>>

@@ -2,12 +2,10 @@ package com.blurt.app.data.sync
 
 import androidx.room.Room
 import com.blurt.app.data.CaptureRepository
-import com.blurt.app.data.ImageStore
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.local.CaptureDao
 import com.blurt.app.data.local.SyncState
 import com.blurt.app.data.model.CaptureType
-import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -53,7 +51,7 @@ class SyncEngineTest {
             .allowMainThreadQueries()
             .build()
         dao = database.captureDao()
-        repository = CaptureRepository(dao, ImageStore(context))
+        repository = CaptureRepository(dao)
         remote = FakeCaptureRemote()
         engine = SyncEngine(
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
@@ -70,7 +68,7 @@ class SyncEngineTest {
 
     @Test
     fun localCreateIsUploadedAndMarkedSynced() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "hello sync", null)
+        val id = repository.create(uid, CaptureType.TEXT, "hello sync")
 
         engine.processOnce(uid, remote.observeAll(uid).first())
 
@@ -82,7 +80,7 @@ class SyncEngineTest {
 
     @Test
     fun editReUploadsTheChangedContent() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "v1", null)
+        val id = repository.create(uid, CaptureType.TEXT, "v1")
         engine.processOnce(uid, remote.observeAll(uid).first())
         assertEquals(SyncState.SYNCED, dao.getById(id, uid)!!.syncState)
 
@@ -96,7 +94,7 @@ class SyncEngineTest {
     @Test
     fun remoteCaptureFromAnotherDeviceIsMergedIn() = runTest {
         remote.seedRemote(
-            listOf(RemoteCapture("remote-doc-1", "written on my tablet", CaptureType.IDEA, null, 1000L, 1000L))
+            listOf(RemoteCapture("remote-doc-1", "written on my tablet", CaptureType.IDEA, 1000L, 1000L))
         )
 
         engine.processOnce(uid, remote.observeAll(uid).first())
@@ -110,14 +108,14 @@ class SyncEngineTest {
 
     @Test
     fun remoteDeleteRemovesLocalSyncedRow() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "doomed", null)
+        val id = repository.create(uid, CaptureType.TEXT, "doomed")
         val remoteId = dao.getById(id, uid)!!.remoteId!!
         engine.processOnce(uid, remote.observeAll(uid).first())
         assertEquals(1, repository.observeAll(uid).first().size)
 
         // The other device deletes it: the doc becomes an explicit tombstone.
         remote.seedRemote(
-            listOf(RemoteCapture(remoteId, "doomed", CaptureType.TEXT, null, 1000L, 1000L, deleted = true))
+            listOf(RemoteCapture(remoteId, "doomed", CaptureType.TEXT, 1000L, 1000L, deleted = true))
         )
         engine.processOnce(uid, remote.observeAll(uid).first())
 
@@ -127,7 +125,7 @@ class SyncEngineTest {
 
     @Test
     fun staleSnapshotNeverDeletesFreshlyUploadedRow() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "keep me", null)
+        val id = repository.create(uid, CaptureType.TEXT, "keep me")
 
         // A snapshot taken before the upload lands has no trace of the row;
         // the engine must not treat absence as deletion.
@@ -139,14 +137,14 @@ class SyncEngineTest {
 
     @Test
     fun localPendingEditWinsOverRemote() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "original", null)
+        val id = repository.create(uid, CaptureType.TEXT, "original")
         val remoteId = dao.getById(id, uid)!!.remoteId!!
         engine.processOnce(uid, remote.observeAll(uid).first())
 
         // Local edit happens while offline-ish: PENDING, not yet pushed.
         repository.updateContent(id, uid, "local edit")
         // Meanwhile the backend gets an older edit from another device.
-        remote.seedRemote(listOf(RemoteCapture(remoteId, "stale remote edit", CaptureType.TEXT, null, 1000L, 2000L)))
+        remote.seedRemote(listOf(RemoteCapture(remoteId, "stale remote edit", CaptureType.TEXT, 1000L, 2000L)))
 
         engine.processOnce(uid, remote.observeAll(uid).first())
 
@@ -157,7 +155,7 @@ class SyncEngineTest {
 
     @Test
     fun deleteTombstoneIsDrainedAfterRemoteDelete() = runTest {
-        val id = repository.create(uid, CaptureType.TEXT, "delete me", null)
+        val id = repository.create(uid, CaptureType.TEXT, "delete me")
         val remoteId = dao.getById(id, uid)!!.remoteId!!
         engine.processOnce(uid, remote.observeAll(uid).first())
 
@@ -171,7 +169,7 @@ class SyncEngineTest {
     @Test
     fun failedUploadStaysPendingAndSucceedsOnRetry() = runTest {
         remote.failNextUpload = true
-        val id = repository.create(uid, CaptureType.TEXT, "flaky", null)
+        val id = repository.create(uid, CaptureType.TEXT, "flaky")
 
         engine.processOnce(uid, remote.observeAll(uid).first())
 
@@ -216,9 +214,6 @@ private class FakeCaptureRemote : CaptureRemote {
             if (it.remoteId == remoteId) it.copy(deleted = true) else it
         }
     }
-
-    override suspend fun uploadImage(uid: String, remoteId: String, file: File): String =
-        "https://storage.example/$uid/$remoteId/${file.name}"
 
     override fun observeAll(uid: String): Flow<List<RemoteCapture>> = docs
 

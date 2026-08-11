@@ -1,11 +1,9 @@
 package com.blurt.app.data.sync
 
-import android.net.Uri
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.local.CaptureDao
 import com.blurt.app.data.local.CaptureEntity
 import com.blurt.app.data.local.SyncState
-import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -87,21 +85,6 @@ class SyncEngine(
         val remoteId = capture.remoteId ?: UUID.randomUUID().toString().also {
             dao.assignRemoteId(capture.id, it)
         }
-
-        // Upload the image file once, then reference it by URL. If the image
-        // host is unavailable (e.g. Storage requires billing on some plans)
-        // the capture metadata still syncs with imageUrl = null and the photo
-        // stays device-local — a failed image must never block text sync.
-        var imageUrl = capture.imageUrl
-        if (imageUrl == null && capture.imageUri?.startsWith("file:") == true) {
-            imageUrl = try {
-                val file = File(Uri.parse(capture.imageUri).path!!)
-                remote.uploadImage(uid, remoteId, file)
-            } catch (e: Exception) {
-                null
-            }
-        }
-
         try {
             remote.uploadCapture(
                 uid,
@@ -109,12 +92,11 @@ class SyncEngine(
                     remoteId = remoteId,
                     content = capture.content,
                     type = capture.type,
-                    imageUrl = imageUrl,
                     createdAt = capture.createdAt,
                     updatedAt = capture.updatedAt,
                 ),
             )
-            dao.markSynced(remoteId, imageUrl)
+            dao.markSynced(remoteId)
         } catch (e: Exception) {
             // Row stays PENDING; a later trigger retries it.
         }
@@ -151,7 +133,6 @@ class SyncEngine(
                     local.copy(
                         content = remoteCapture.content,
                         type = remoteCapture.type,
-                        imageUrl = remoteCapture.imageUrl,
                         updatedAt = remoteCapture.updatedAt,
                         syncState = SyncState.SYNCED,
                     )
@@ -167,7 +148,6 @@ private fun RemoteCapture.toEntity(ownerId: String): CaptureEntity = CaptureEnti
     syncState = SyncState.SYNCED,
     content = content,
     type = type,
-    imageUrl = imageUrl,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

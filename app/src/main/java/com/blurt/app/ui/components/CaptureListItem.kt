@@ -20,10 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.util.TimeFormat
@@ -31,7 +29,7 @@ import com.blurt.app.util.urlDomain
 
 /**
  * A single capture row used across Home, Library and Search.
- * Shows a type tile (or image thumbnail) plus a preview and timestamp.
+ * Shows a type tile plus a preview and timestamp.
  */
 @Composable
 fun CaptureListItem(
@@ -50,30 +48,19 @@ fun CaptureListItem(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (capture.type == CaptureType.IMAGE && capture.imageForDisplay != null) {
-                AsyncImage(
-                    model = capture.imageForDisplay,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(14.dp)),
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = typeIcon(capture.type),
+                    contentDescription = capture.type.label,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = typeIcon(capture.type),
-                        contentDescription = capture.type.label,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -96,7 +83,6 @@ fun CaptureListItem(
 }
 
 private fun previewText(capture: Capture): String = when {
-    capture.type == CaptureType.IMAGE -> capture.content.ifBlank { "Image" }
     capture.type == CaptureType.LINK -> capture.content.urlDomain()
     else -> capture.content
 }

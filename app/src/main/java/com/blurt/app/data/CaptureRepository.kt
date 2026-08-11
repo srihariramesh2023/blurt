@@ -1,6 +1,5 @@
 package com.blurt.app.data
 
-import android.net.Uri
 import com.blurt.app.data.local.CaptureDao
 import com.blurt.app.data.local.CaptureEntity
 import com.blurt.app.data.local.SyncState
@@ -26,7 +25,6 @@ import kotlinx.coroutines.flow.map
  */
 class CaptureRepository(
     private val dao: CaptureDao,
-    private val imageStore: ImageStore,
 ) {
 
     fun observeAll(ownerId: String): Flow<List<Capture>> =
@@ -38,11 +36,8 @@ class CaptureRepository(
     fun search(query: String, ownerId: String): Flow<List<Capture>> =
         dao.search(query.escapeLikePattern(), ownerId).map { list -> list.map(CaptureEntity::toDomain) }
 
-    suspend fun create(ownerId: String, type: CaptureType, content: String, imageUri: Uri?): Long {
+    suspend fun create(ownerId: String, type: CaptureType, content: String): Long {
         val now = System.currentTimeMillis()
-        // Copy the picked image into app-private storage so the note survives
-        // reboots (photo-picker URI grants are temporary).
-        val storedImageUri = imageUri?.let(imageStore::storeImage)
         return dao.insert(
             CaptureEntity(
                 ownerId = ownerId,
@@ -50,7 +45,6 @@ class CaptureRepository(
                 syncState = SyncState.PENDING,
                 content = content.trim(),
                 type = type,
-                imageUri = storedImageUri?.toString(),
                 createdAt = now,
                 updatedAt = now,
             )
@@ -72,10 +66,8 @@ class CaptureRepository(
     suspend fun delete(id: Long, ownerId: String) {
         val entity = dao.getById(id, ownerId) ?: return
         // Tombstone first: the row stays until the sync engine confirms the
-        // backend delete, so the deletion reaches other devices. The local
-        // image file is no longer needed and is cleaned up immediately.
+        // backend delete, so the deletion reaches other devices.
         dao.tombstone(id, System.currentTimeMillis())
-        imageStore.deleteImage(entity.imageUri?.let(Uri::parse))
     }
 
     /** Assigns pre-auth legacy captures to the first user who signs in. */

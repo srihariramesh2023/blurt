@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [CaptureEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(CaptureTypeConverter::class, SyncStateConverter::class)
@@ -38,6 +38,37 @@ abstract class BlurtDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE captures ADD COLUMN syncState TEXT NOT NULL DEFAULT 'PENDING'")
                 db.execSQL("ALTER TABLE captures ADD COLUMN imageUrl TEXT")
                 db.execSQL("ALTER TABLE captures ADD COLUMN deletedAt INTEGER")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+            }
+        }
+
+        /**
+         * v3 → v4: removes the image feature. The image columns are dropped and
+         * legacy IMAGE rows become TEXT so no data is lost and nothing crashes.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS captures_new (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`ownerId` TEXT, " +
+                        "`remoteId` TEXT, " +
+                        "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                        "`content` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`deletedAt` INTEGER, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO captures_new (id, ownerId, remoteId, syncState, content, type, deletedAt, createdAt, updatedAt) " +
+                        "SELECT id, ownerId, remoteId, syncState, content, " +
+                        "CASE WHEN type = 'IMAGE' THEN 'TEXT' ELSE type END, " +
+                        "deletedAt, createdAt, updatedAt FROM captures"
+                )
+                db.execSQL("DROP TABLE captures")
+                db.execSQL("ALTER TABLE captures_new RENAME TO captures")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
             }
         }

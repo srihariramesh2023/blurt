@@ -1,12 +1,9 @@
 package com.blurt.app.data
 
-import android.net.Uri
 import androidx.room.Room
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.local.SyncState
 import com.blurt.app.data.model.CaptureType
-import java.io.ByteArrayInputStream
-import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -20,7 +17,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -44,7 +40,7 @@ class CaptureRepositoryTest {
         database = Room.inMemoryDatabaseBuilder(context, BlurtDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = CaptureRepository(database.captureDao(), ImageStore(context))
+        repository = CaptureRepository(database.captureDao())
     }
 
     @After
@@ -56,7 +52,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun create_persistsCaptureAndReturnsPositiveId() = runTest {
-        val id = repository.create(alice, CaptureType.TEXT, "hello world", null)
+        val id = repository.create(alice, CaptureType.TEXT, "hello world")
 
         assertTrue(id > 0)
         val captures = repository.observeAll(alice).first()
@@ -67,7 +63,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun create_stampsRemoteIdAndPendingSyncState() = runTest {
-        val id = repository.create(alice, CaptureType.TEXT, "sync me", null)
+        val id = repository.create(alice, CaptureType.TEXT, "sync me")
 
         val entity = database.captureDao().getById(id, alice)!!
         assertNotNull(entity.remoteId)
@@ -75,32 +71,17 @@ class CaptureRepositoryTest {
     }
 
     @Test
-    fun create_trimsContentAndCopiesImageIntoAppStorage() = runTest {
-        val context = RuntimeEnvironment.getApplication()
-        val source = Uri.parse("content://media/picker/1")
-        shadowOf(context.contentResolver)
-            .registerInputStream(source, ByteArrayInputStream("fake-image-bytes".toByteArray()))
+    fun create_trimsContent() = runTest {
+        val id = repository.create(alice, CaptureType.TEXT, "  padded  ")
 
-        val id = repository.create(alice, CaptureType.IMAGE, "  caption here  ", source)
-
-        val capture = repository.observeById(id, alice).first()
-        assertNotNull(capture)
-        assertEquals("caption here", capture?.content)
-        // The picked content:// URI must NOT be stored as-is; it is copied into
-        // app storage so the note survives reboots.
-        val storedUri = capture?.imageUri
-        assertNotNull(storedUri)
-        assertEquals("file", storedUri?.scheme)
-        val file = File(storedUri!!.path!!)
-        assertTrue(file.exists())
-        assertEquals("fake-image-bytes", file.readText())
+        assertEquals("padded", repository.observeById(id, alice).first()?.content)
     }
 
     @Test
     fun observeAll_returnsNewestFirst() = runTest {
-        val first = repository.create(alice, CaptureType.TEXT, "oldest", null)
-        val second = repository.create(alice, CaptureType.TEXT, "middle", null)
-        val third = repository.create(alice, CaptureType.TEXT, "newest", null)
+        val first = repository.create(alice, CaptureType.TEXT, "oldest")
+        val second = repository.create(alice, CaptureType.TEXT, "middle")
+        val third = repository.create(alice, CaptureType.TEXT, "newest")
 
         val captures = repository.observeAll(alice).first()
         assertEquals(listOf(third, second, first), captures.map { it.id })
@@ -110,8 +91,8 @@ class CaptureRepositoryTest {
 
     @Test
     fun observeAll_neverReturnsAnotherUsersCaptures() = runTest {
-        repository.create(alice, CaptureType.TEXT, "alice's private note", null)
-        repository.create(bob, CaptureType.TEXT, "bob's private note", null)
+        repository.create(alice, CaptureType.TEXT, "alice's private note")
+        repository.create(bob, CaptureType.TEXT, "bob's private note")
 
         val aliceSees = repository.observeAll(alice).first()
         val bobSees = repository.observeAll(bob).first()
@@ -122,7 +103,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun observeById_returnsNullForAnotherUsersCapture() = runTest {
-        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note", null)
+        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note")
 
         assertNotNull(repository.observeById(aliceId, alice).first())
         assertNull(repository.observeById(aliceId, bob).first())
@@ -130,8 +111,8 @@ class CaptureRepositoryTest {
 
     @Test
     fun search_isScopedToTheOwner() = runTest {
-        repository.create(alice, CaptureType.TEXT, "alice writes about AI", null)
-        repository.create(bob, CaptureType.TEXT, "bob writes about AI", null)
+        repository.create(alice, CaptureType.TEXT, "alice writes about AI")
+        repository.create(bob, CaptureType.TEXT, "bob writes about AI")
 
         val aliceHits = repository.search("AI", alice).first()
         assertEquals(1, aliceHits.size)
@@ -140,7 +121,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun update_cannotTouchAnotherUsersCapture() = runTest {
-        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note", null)
+        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note")
 
         repository.updateContent(aliceId, bob, "bob hacked this")
 
@@ -149,7 +130,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun delete_cannotRemoveAnotherUsersCapture() = runTest {
-        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note", null)
+        val aliceId = repository.create(alice, CaptureType.TEXT, "alice's note")
 
         repository.delete(aliceId, bob)
 
@@ -170,7 +151,7 @@ class CaptureRepositoryTest {
                 updatedAt = System.currentTimeMillis(),
             )
         )
-        repository.create(alice, CaptureType.TEXT, "already owned", null)
+        repository.create(alice, CaptureType.TEXT, "already owned")
 
         repository.claimUnowned(alice)
 
@@ -184,7 +165,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun updateContent_modifiesContentAndBumpsTimestamp() = runTest {
-        val id = repository.create(alice, CaptureType.TEXT, "before", null)
+        val id = repository.create(alice, CaptureType.TEXT, "before")
         val before = repository.observeById(id, alice).first()!!
 
         repository.updateContent(id, alice, "after")
@@ -203,9 +184,9 @@ class CaptureRepositoryTest {
 
     @Test
     fun updateContent_flipsSyncedRowBackToPending() = runTest {
-        val id = repository.create(alice, CaptureType.TEXT, "original", null)
+        val id = repository.create(alice, CaptureType.TEXT, "original")
         val entity = database.captureDao().getById(id, alice)!!
-        database.captureDao().markSynced(entity.remoteId!!, null)
+        database.captureDao().markSynced(entity.remoteId!!)
         assertEquals(SyncState.SYNCED, database.captureDao().getById(id, alice)!!.syncState)
 
         repository.updateContent(id, alice, "edited")
@@ -215,8 +196,8 @@ class CaptureRepositoryTest {
 
     @Test
     fun delete_removesOnlyTheTargetRecord() = runTest {
-        val keep = repository.create(alice, CaptureType.IDEA, "keep me", null)
-        val drop = repository.create(alice, CaptureType.IDEA, "drop me", null)
+        val keep = repository.create(alice, CaptureType.IDEA, "keep me")
+        val drop = repository.create(alice, CaptureType.IDEA, "drop me")
 
         repository.delete(drop, alice)
 
@@ -227,7 +208,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun delete_tombstonesTheRowSoItCanSync() = runTest {
-        val id = repository.create(alice, CaptureType.TEXT, "bye", null)
+        val id = repository.create(alice, CaptureType.TEXT, "bye")
 
         repository.delete(id, alice)
 
@@ -239,33 +220,12 @@ class CaptureRepositoryTest {
         assertNotNull(entity!!.deletedAt)
     }
 
-    @Test
-    fun delete_removesTheStoredImageFile() = runTest {
-        val context = RuntimeEnvironment.getApplication()
-        val source = Uri.parse("content://media/picker/1")
-        shadowOf(context.contentResolver)
-            .registerInputStream(source, ByteArrayInputStream("bytes".toByteArray()))
-
-        val id = repository.create(alice, CaptureType.IMAGE, "caption", source)
-        val imagesDir = File(context.filesDir, "images")
-        val storedFiles = imagesDir.listFiles() ?: emptyArray()
-        assertEquals(1, storedFiles.size)
-        assertTrue(storedFiles[0].exists())
-
-        repository.delete(id, alice)
-
-        // The copied image file must be cleaned up with the note. (Asserted via
-        // the filesystem rather than the stored URI string because URI path
-        // round-tripping is not portable across host OSes in Robolectric.)
-        assertTrue((imagesDir.listFiles() ?: emptyArray()).isEmpty())
-    }
-
     // --- search ---------------------------------------------------------------
 
     @Test
     fun search_isCaseInsensitiveAndPartial() = runTest {
-        repository.create(alice, CaptureType.TEXT, "Blurt text about AI agents", null)
-        repository.create(alice, CaptureType.TEXT, "completely different", null)
+        repository.create(alice, CaptureType.TEXT, "Blurt text about AI agents")
+        repository.create(alice, CaptureType.TEXT, "completely different")
 
         val hits = repository.search("blurt", alice).first()
         assertEquals(1, hits.size)
@@ -274,7 +234,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun search_matchesLinkContentCaseInsensitively() = runTest {
-        repository.create(alice, CaptureType.LINK, "https://voiceos.com", null)
+        repository.create(alice, CaptureType.LINK, "https://voiceos.com")
 
         assertEquals(1, repository.search("voiceos", alice).first().size)
         assertEquals(1, repository.search("VOICEOS", alice).first().size)
@@ -282,8 +242,8 @@ class CaptureRepositoryTest {
 
     @Test
     fun search_escapesPercentWildcard() = runTest {
-        repository.create(alice, CaptureType.TEXT, "Progress 100% done", null)
-        repository.create(alice, CaptureType.TEXT, "100 bananas", null)
+        repository.create(alice, CaptureType.TEXT, "Progress 100% done")
+        repository.create(alice, CaptureType.TEXT, "100 bananas")
 
         // Unescaped, "100%" would match both rows (percent = any suffix).
         val hits = repository.search("100%", alice).first()
@@ -293,8 +253,8 @@ class CaptureRepositoryTest {
 
     @Test
     fun search_escapesUnderscoreWildcard() = runTest {
-        repository.create(alice, CaptureType.TEXT, "snake_case note", null)
-        repository.create(alice, CaptureType.TEXT, "snakeXcase note", null)
+        repository.create(alice, CaptureType.TEXT, "snake_case note")
+        repository.create(alice, CaptureType.TEXT, "snakeXcase note")
 
         // Unescaped, "_" would match any single character (both rows).
         val hits = repository.search("snake_case", alice).first()
@@ -304,7 +264,7 @@ class CaptureRepositoryTest {
 
     @Test
     fun search_noMatchesReturnsEmptyList() = runTest {
-        repository.create(alice, CaptureType.TEXT, "nothing to see here", null)
+        repository.create(alice, CaptureType.TEXT, "nothing to see here")
 
         assertTrue(repository.search("zzzzzz", alice).first().isEmpty())
     }
@@ -312,8 +272,8 @@ class CaptureRepositoryTest {
     @Test
     fun search_emptyQueryReturnsAllRows() = runTest {
         // The ViewModel guards blank queries; the repository contract is documented here.
-        repository.create(alice, CaptureType.TEXT, "one", null)
-        repository.create(alice, CaptureType.TEXT, "two", null)
+        repository.create(alice, CaptureType.TEXT, "one")
+        repository.create(alice, CaptureType.TEXT, "two")
 
         assertEquals(2, repository.search("", alice).first().size)
     }

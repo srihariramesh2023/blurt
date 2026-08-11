@@ -1,14 +1,11 @@
 package com.blurt.app.data.model
 
-import android.net.Uri
 import java.time.Instant
 
 /**
  * A single saved blurt.
  *
- * [content] holds the text (for TEXT/IDEA), the URL (for LINK), or an optional
- * caption (for IMAGE). [imageUri] is the on-device file for IMAGE captures;
- * [imageUrl] is the backend URL used to display the image on other devices.
+ * [content] holds the text (for TEXT/IDEA) or the URL (for LINK).
  */
 data class Capture(
     val id: Long,
@@ -18,12 +15,6 @@ data class Capture(
     val remoteId: String?,
     val content: String,
     val type: CaptureType,
-    val imageUri: Uri?,
-    val imageUrl: String?,
     val createdAt: Instant,
     val updatedAt: Instant,
-) {
-    /** Best image source for display: the local file when present, else the backend URL. */
-    val imageForDisplay: Uri?
-        get() = imageUri ?: imageUrl?.let(Uri::parse)
-}
+)

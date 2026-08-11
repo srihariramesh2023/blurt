@@ -1,8 +1,5 @@
 package com.blurt.app.ui.capture
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -10,13 +7,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,15 +21,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,15 +43,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.blurt.app.data.model.CaptureType
-import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
@@ -71,7 +58,7 @@ import com.blurt.app.util.normalizedHttpUrl
 import com.blurt.app.util.urlDomain
 
 /**
- * The fast capture composer. One screen, four types, switchable at the top.
+ * The fast capture composer. One screen, three types, switchable at the top.
  * Editors cross-fade between types, and the save button reflects validity.
  */
 @Composable
@@ -82,7 +69,6 @@ fun CaptureScreen(
 ) {
     val type by viewModel.type.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
-    val imageUri by viewModel.imageUri.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val saved by viewModel.saved.collectAsStateWithLifecycle()
 
@@ -96,7 +82,6 @@ fun CaptureScreen(
     val canSave = when (type) {
         CaptureType.TEXT, CaptureType.IDEA -> content.isNotBlank()
         CaptureType.LINK -> content.isNotBlank() && content.normalizedHttpUrl().isHttpUrl()
-        CaptureType.IMAGE -> imageUri != null
     }
     val saveSource = rememberBlurtInteractionSource()
 
@@ -141,13 +126,6 @@ fun CaptureScreen(
                     value = content,
                     onValueChange = viewModel::onContentChange,
                 )
-
-                CaptureType.IMAGE -> ImageEditor(
-                    imageUri = imageUri,
-                    caption = content,
-                    onCaptionChange = viewModel::onContentChange,
-                    onPickImage = viewModel::onImagePicked,
-                )
             }
         }
 
@@ -188,7 +166,7 @@ fun CaptureScreen(
     }
 }
 
-/** Segmented Text / Idea / Link / Image selector with spring color transitions. */
+/** Segmented Text / Idea / Link selector with spring color transitions. */
 @Composable
 private fun TypeSelector(selected: CaptureType, onSelect: (CaptureType) -> Unit) {
     Row(
@@ -312,116 +290,5 @@ private fun LinkEditor(value: String, onValueChange: (String) -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = helperColor,
         )
-    }
-}
-
-@Composable
-private fun ImageEditor(
-    imageUri: android.net.Uri?,
-    caption: String,
-    onCaptionChange: (String) -> Unit,
-    onPickImage: (android.net.Uri) -> Unit,
-) {
-    val pickImage = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let { onPickImage(it) }
-    }
-
-    Column {
-        if (imageUri == null) {
-            Surface(
-                onClick = {
-                    pickImage.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Icon(
-                        imageVector = BlurtIcons.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(34.dp),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Choose image",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "From your photos",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = imageUri != null,
-            enter = fadeIn(tween(240)) + scaleIn(tween(240)),
-        ) {
-            Column {
-                Box {
-                    AsyncImage(
-                        model = imageUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 300.dp)
-                            .clip(RoundedCornerShape(20.dp)),
-                    )
-                    IconButton(
-                        onClick = {
-                            pickImage.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Change image",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                TextField(
-                    value = caption,
-                    onValueChange = onCaptionChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text("Add a caption (optional)", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            }
-        }
     }
 }

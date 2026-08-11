@@ -88,7 +88,7 @@ fun HomeScreen(
             EmptyState(
                 icon = BlurtIcons.BlurtMark,
                 title = "Nothing here yet",
-                body = "Blurt anything — text, ideas, links, images — and it'll be waiting for you here.",
+                body = "Blurt anything — text, ideas, links — and it'll be waiting for you here.",
             )
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {

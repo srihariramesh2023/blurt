@@ -8,7 +8,10 @@ class CaptureTypeConverter {
     fun fromType(type: CaptureType): String = type.name
 
     @TypeConverter
-    fun toType(name: String): CaptureType = CaptureType.valueOf(name)
+    fun toType(name: String): CaptureType =
+        // Unknown/legacy types (the removed IMAGE) degrade to TEXT instead of
+        // crashing the app when an old database is opened.
+        runCatching { CaptureType.valueOf(name) }.getOrDefault(CaptureType.TEXT)
 }
 
 class SyncStateConverter {

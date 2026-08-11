@@ -6,7 +6,6 @@ import androidx.room.Room
 import com.blurt.app.auth.AuthRepository
 import com.blurt.app.auth.FirebaseAuthRepository
 import com.blurt.app.data.CaptureRepository
-import com.blurt.app.data.ImageStore
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.sync.RtdbCaptureRemote
 import com.blurt.app.data.sync.SyncEngine
@@ -38,14 +37,17 @@ class AppContainer(context: Context) {
         BlurtDatabase::class.java,
         "blurt.db",
     )
-        .addMigrations(BlurtDatabase.MIGRATION_1_2, BlurtDatabase.MIGRATION_2_3)
+        .addMigrations(
+            BlurtDatabase.MIGRATION_1_2,
+            BlurtDatabase.MIGRATION_2_3,
+            BlurtDatabase.MIGRATION_3_4,
+        )
         .build()
 
     val authRepository: AuthRepository = FirebaseAuthRepository(context)
 
     val captureRepository: CaptureRepository = CaptureRepository(
         dao = database.captureDao(),
-        imageStore = ImageStore(context),
     )
 
     private val captureRemote = RtdbCaptureRemote(context)

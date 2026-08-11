@@ -1,12 +1,12 @@
 # Blurt
 
 Blurt is a native Android application built with Kotlin and Jetpack Compose. It
-is a quiet home for the things on your mind — text, ideas, links, and images —
+is a quiet home for the things on your mind — text, ideas, and links —
 with a dark-first, Apple-inspired design language.
 
 ## Features
 
-- **Capture**: blurts of four types — Text, Idea, Link, Image — with a quick
+- **Capture**: blurts of three types — Text, Idea, Link — with a quick
   capture surface on Home.
 - **Library**: every blurt, newest first.
 - **Search**: live local keyword search across your blurts.
@@ -107,18 +107,11 @@ Captures live at `users/{uid}/captures`, scoped per user by the rules in
       (it must contain the Realtime Database URL) and replace
       `app/google-services.json`
 
-Images: the app also tries Cloud Storage for image sync (best effort — Storage
-may require billing on some projects). If Storage is unavailable, capture
-metadata still syncs and photos stay on the device that took them; nothing
-blocks. If you do enable Cloud Storage, publish the rules in `storage.rules`
-on its Rules tab.
-
 How sync works: every capture is created with a device-generated UUID id and a
 PENDING sync state. The sync engine (running while signed in) pushes PENDING
-rows to `users/{uid}/captures`, uploads images to `users/{uid}/images` when
-Storage is available, and merges changes from the user's other devices back
-into the local database. Deletes are tombstoned (`deleted: true`) so they
-propagate; conflicts resolve last-write-wins by `updatedAt`, with an
+rows to `users/{uid}/captures` and merges changes from the user's other
+devices back into the local database. Deletes are tombstoned (`deleted: true`)
+so they propagate; conflicts resolve last-write-wins by `updatedAt`, with an
 un-uploaded local edit always winning.
 
 ### 4. Session behavior

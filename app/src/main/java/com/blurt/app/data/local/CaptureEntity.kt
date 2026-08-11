@@ -1,6 +1,5 @@
 package com.blurt.app.data.local
 
-import android.net.Uri
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -31,9 +30,6 @@ data class CaptureEntity(
     val syncState: SyncState = SyncState.PENDING,
     val content: String,
     val type: CaptureType,
-    val imageUri: String? = null,
-    /** Backend URL of the image, set once the local file has been uploaded. */
-    val imageUrl: String? = null,
     /**
      * Set when the user deletes; the row is removed locally only after the
      * backend delete is confirmed, so deletes propagate across devices.
@@ -49,8 +45,6 @@ fun CaptureEntity.toDomain(): Capture = Capture(
     remoteId = remoteId,
     content = content,
     type = type,
-    imageUri = imageUri?.let(Uri::parse),
-    imageUrl = imageUrl,
     createdAt = Instant.ofEpochMilli(createdAt),
     updatedAt = Instant.ofEpochMilli(updatedAt),
 )
@@ -61,8 +55,6 @@ fun Capture.toEntity(): CaptureEntity = CaptureEntity(
     remoteId = remoteId,
     content = content,
     type = type,
-    imageUri = imageUri?.toString(),
-    imageUrl = imageUrl,
     createdAt = createdAt.toEpochMilli(),
     updatedAt = updatedAt.toEpochMilli(),
 )
