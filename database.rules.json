@@ -1,0 +1,12 @@
+{
+  "rules": {
+    // Every capture lives under the owner's UID. Only the authenticated
+    // owner may read or write their own data — enforced server-side.
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    }
+  }
+}

@@ -6,11 +6,19 @@ build/
 # Local configuration (machine-specific)
 local.properties
 
+# Firebase per-project config (contains app identifiers/secrets)
+google-services.json
+
 # Android SDK installed locally for CLI-only builds
 .android-sdk/
 
 # Freebuff client session database
 .freebuff/
+
+# On-device smoke-test artifacts (screenshots, UI dumps, preview gallery)
+smoke/
+smoke-shots/
+.screenshots/
 
 # IDE
 .idea/
