@@ -16,11 +16,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
-    repository: CaptureRepository,
-    authState: StateFlow<AuthState>,
+    private val repository: CaptureRepository,
+    private val authState: StateFlow<AuthState>,
 ) : ViewModel() {
 
     /** Every capture of the signed-in user, newest first. */
@@ -31,6 +32,14 @@ class LibraryViewModel(
             else repository.observeAll(uid)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Tombstones the capture; the sync engine removes it from the backend. */
+    fun delete(id: Long) {
+        viewModelScope.launch {
+            val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            repository.delete(id, uid)
+        }
+    }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {

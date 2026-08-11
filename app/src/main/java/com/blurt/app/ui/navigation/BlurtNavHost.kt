@@ -14,6 +14,7 @@ import com.blurt.app.ui.detail.DetailScreen
 import com.blurt.app.ui.home.HomeScreen
 import com.blurt.app.ui.library.LibraryScreen
 import com.blurt.app.ui.search.SearchScreen
+import com.blurt.app.ui.theme.ThemeMode
 
 object BlurtRoutes {
     const val HOME = "home"
@@ -30,6 +31,8 @@ object BlurtRoutes {
 fun BlurtNavHost(
     navController: NavHostController,
     user: AuthUser,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -41,6 +44,8 @@ fun BlurtNavHost(
         composable(BlurtRoutes.HOME) {
             HomeScreen(
                 user = user,
+                themeMode = themeMode,
+                onThemeChange = onThemeChange,
                 onSignOut = onSignOut,
                 onCapture = { navController.navigate(BlurtRoutes.capture(it)) },
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },

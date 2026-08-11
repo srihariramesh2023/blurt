@@ -17,11 +17,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
-    repository: CaptureRepository,
-    authState: StateFlow<AuthState>,
+    private val repository: CaptureRepository,
+    private val authState: StateFlow<AuthState>,
 ) : ViewModel() {
 
     /** Most recent captures for the signed-in user, for the Home screen. */
@@ -32,6 +33,14 @@ class HomeViewModel(
             else repository.observeAll(uid).map { it.take(RECENT_LIMIT) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Tombstones the capture; the sync engine removes it from the backend. */
+    fun delete(id: Long) {
+        viewModelScope.launch {
+            val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            repository.delete(id, uid)
+        }
+    }
 
     companion object {
         private const val RECENT_LIMIT = 8

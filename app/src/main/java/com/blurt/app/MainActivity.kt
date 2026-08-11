@@ -10,9 +10,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -23,6 +31,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,8 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -45,6 +56,7 @@ import com.blurt.app.ui.login.LoginScreen
 import com.blurt.app.ui.navigation.BlurtNavHost
 import com.blurt.app.ui.navigation.BlurtRoutes
 import com.blurt.app.ui.theme.BlurtTheme
+import com.blurt.app.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -52,9 +64,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BlurtTheme {
-                BlurtAppRoot()
-            }
+            BlurtAppRoot()
         }
     }
 }
@@ -68,7 +78,23 @@ class MainActivity : ComponentActivity() {
 private fun BlurtAppRoot() {
     val app = LocalContext.current.applicationContext as BlurtApp
     val authState by app.container.authRepository.authState.collectAsStateWithLifecycle()
+    val themeMode by app.container.themeMode.collectAsStateWithLifecycle()
+    val darkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     val scope = rememberCoroutineScope()
+
+    // Status/navigation bar icon contrast follows the active theme.
+    val view = LocalView.current
+    val context = LocalContext.current
+    LaunchedEffect(darkTheme) {
+        val window = (context as? ComponentActivity)?.window ?: return@LaunchedEffect
+        val controller = WindowCompat.getInsetsController(window, view)
+        controller.isAppearanceLightStatusBars = !darkTheme
+        controller.isAppearanceLightNavigationBars = !darkTheme
+    }
 
     // Legacy captures created before authentication belong to nobody; assign
     // them to the first user who signs in on this device. Idempotent.
@@ -77,20 +103,24 @@ private fun BlurtAppRoot() {
         if (uid != null) app.container.captureRepository.claimUnowned(uid)
     }
 
-    AnimatedContent(
-        targetState = authState,
-        transitionSpec = {
-            fadeIn(tween(350)) togetherWith fadeOut(tween(200))
-        },
-        label = "authGate",
-    ) { state ->
-        when (state) {
-            is AuthState.Loading -> BlurtSplash()
-            is AuthState.SignedOut -> LoginScreen()
-            is AuthState.SignedIn -> BlurtMainScaffold(
-                user = state.user,
-                onSignOut = { scope.launch { app.container.authRepository.signOut() } },
-            )
+    BlurtTheme(darkTheme = darkTheme) {
+        AnimatedContent(
+            targetState = authState,
+            transitionSpec = {
+                fadeIn(tween(350)) togetherWith fadeOut(tween(200))
+            },
+            label = "authGate",
+        ) { state ->
+            when (state) {
+                is AuthState.Loading -> BlurtSplash()
+                is AuthState.SignedOut -> LoginScreen()
+                is AuthState.SignedIn -> BlurtMainScaffold(
+                    user = state.user,
+                    themeMode = themeMode,
+                    onThemeChange = { app.container.themePreferences.setThemeMode(it) },
+                    onSignOut = { scope.launch { app.container.authRepository.signOut() } },
+                )
+            }
         }
     }
 }
@@ -112,6 +142,8 @@ private fun BlurtSplash() {
 @Composable
 private fun BlurtMainScaffold(
     user: AuthUser,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
 ) {
     // A fresh nav controller per session, so signing out and back in never
@@ -131,12 +163,18 @@ private fun BlurtMainScaffold(
         BlurtNavHost(
             navController = navController,
             user = user,
+            themeMode = themeMode,
+            onThemeChange = onThemeChange,
             onSignOut = onSignOut,
             modifier = Modifier.padding(innerPadding),
         )
     }
 }
 
+/**
+ * Minimal three-tab bar. The active tab is gold with a subtle gold indicator;
+ * the rest stay muted. No borders, no badges — quiet, like the rest of Blurt.
+ */
 @Composable
 private fun BlurtBottomBar(navController: NavHostController, currentRoute: String?) {
     val items = listOf(
@@ -145,10 +183,11 @@ private fun BlurtBottomBar(navController: NavHostController, currentRoute: Strin
         BottomItem(BlurtRoutes.SEARCH, Icons.Filled.Search, stringResource(com.blurt.app.R.string.nav_search)),
     )
 
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
         items.forEach { item ->
+            val selected = currentRoute == item.route
             NavigationBarItem(
-                selected = currentRoute == item.route,
+                selected = selected,
                 onClick = {
                     navController.navigate(item.route) {
                         popUpTo(BlurtRoutes.HOME) { saveState = true }
@@ -156,12 +195,15 @@ private fun BlurtBottomBar(navController: NavHostController, currentRoute: Strin
                         restoreState = true
                     }
                 },
-                icon = { Icon(item.icon, contentDescription = item.label) },
+                icon = {
+                    Icon(item.icon, contentDescription = item.label, modifier = Modifier.size(22.dp))
+                },
                 label = { Text(item.label) },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MaterialTheme.colorScheme.primary,
                     selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    indicatorColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                    else androidx.compose.ui.graphics.Color.Transparent,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),

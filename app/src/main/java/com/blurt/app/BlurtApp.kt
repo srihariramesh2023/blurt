@@ -9,9 +9,12 @@ import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.sync.RtdbCaptureRemote
 import com.blurt.app.data.sync.SyncEngine
+import com.blurt.app.ui.theme.ThemeMode
+import com.blurt.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.StateFlow
 
 class BlurtApp : Application() {
 
@@ -45,6 +48,9 @@ class AppContainer(context: Context) {
         .build()
 
     val authRepository: AuthRepository = FirebaseAuthRepository(context)
+
+    val themePreferences = ThemePreferences(context)
+    val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
 
     val captureRepository: CaptureRepository = CaptureRepository(
         dao = database.captureDao(),

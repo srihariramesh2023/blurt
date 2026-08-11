@@ -22,17 +22,16 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
- * Phase 1 search is plain local keyword search: case-insensitive, across
- * capture content and links, updating live as the query changes.
- * (Semantic/vector search arrives with a backend in a later phase.)
- * Results are scoped to the signed-in user.
+ * Live local keyword search across the signed-in user's blurts, updating as
+ * the query changes. (Semantic search layers on top of this.)
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class SearchViewModel(
-    repository: CaptureRepository,
-    authState: StateFlow<AuthState>,
+    private val repository: CaptureRepository,
+    private val authState: StateFlow<AuthState>,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -53,6 +52,14 @@ class SearchViewModel(
 
     fun onQueryChange(value: String) {
         _query.value = value
+    }
+
+    /** Tombstones the capture; the sync engine removes it from the backend. */
+    fun delete(id: Long) {
+        viewModelScope.launch {
+            val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            repository.delete(id, uid)
+        }
     }
 
     companion object {

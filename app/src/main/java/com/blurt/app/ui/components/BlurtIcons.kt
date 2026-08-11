@@ -50,6 +50,39 @@ object BlurtIcons {
         )
     }
 
+    /** Sun glyph for the Light theme option. */
+    val Sun: ImageVector by lazy {
+        icon(
+            name = "Sun",
+            pathData = "M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" +
+                "M2 13h2v-2H2v2zm18 0h2v-2h-2v2zM11 2h2v2h-2V2zm0 18h2v2h-2v-2zM4.22 19.78l1.42 1.42 1.41-1.41-1.42-1.42-1.41 1.41zM17.66 4.93l1.41-1.41-1.42-1.42-1.41 1.41 1.42 1.42zM4.22 4.22L2.8 5.64l1.41 1.41 1.42-1.42-1.41-1.41zM17.66 17.66l1.42 1.41 1.41-1.41-1.42-1.42-1.41 1.42z",
+        )
+    }
+
+    /** Moon glyph for the Dark theme option. */
+    val Moon: ImageVector by lazy {
+        icon(
+            name = "Moon",
+            pathData = "M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z",
+        )
+    }
+
+    /** Monitor glyph for the System theme option. */
+    val Monitor: ImageVector by lazy {
+        icon(
+            name = "Monitor",
+            pathData = "M20 3H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h6v2h-2v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H4V5h16v12z",
+        )
+    }
+
+    /** Sliders glyph for search filters. */
+    val Tune: ImageVector by lazy {
+        icon(
+            name = "Tune",
+            pathData = "M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z",
+        )
+    }
+
     private fun icon(name: String, pathData: String): ImageVector =
         ImageVector.Builder(
             name = name,

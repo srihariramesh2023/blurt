@@ -38,29 +38,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.auth.AuthUser
-import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.AccountMenu
 import com.blurt.app.ui.components.BlurtIcons
-import com.blurt.app.ui.components.BlurtLogo
 import com.blurt.app.ui.components.CaptureListItem
 import com.blurt.app.ui.components.EmptyState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.components.typeIcon
+import com.blurt.app.ui.theme.BlurtDuration
+import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.ThemeMode
 import com.blurt.app.util.TimeFormat
 
 /**
- * Home: branding with a date line, the quick capture surface, and recent
- * captures that stagger in with a gentle rise.
+ * Home: the Blurt wordmark with a date line, the quick capture surface, and
+ * recent captures that stagger in with a gentle rise.
  */
 @Composable
 fun HomeScreen(
     user: AuthUser,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
     onCapture: (CaptureType) -> Unit,
     onOpenCapture: (Long) -> Unit,
@@ -75,11 +79,11 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = BlurtSpacing.xl),
     ) {
-        Spacer(Modifier.height(12.dp))
-        HomeHeader(user = user, onSignOut = onSignOut, onSearch = onSearch)
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
+        HomeHeader(user = user, themeMode = themeMode, onThemeChange = onThemeChange, onSignOut = onSignOut, onSearch = onSearch)
+        Spacer(Modifier.height(BlurtSpacing.xl))
         QuickCaptureCard(onCapture = onCapture)
         Spacer(Modifier.height(28.dp))
 
@@ -95,6 +99,7 @@ fun HomeScreen(
                 Text(
                     text = "Recent",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.weight(1f))
@@ -113,13 +118,14 @@ fun HomeScreen(
                 itemsIndexed(captures, key = { _, capture -> capture.id }) { index, capture ->
                     AnimatedVisibility(
                         visible = entered,
-                        enter = fadeIn(tween(300, delayMillis = index * 55)) +
-                            slideInVertically(tween(300, delayMillis = index * 55)) { it / 4 },
+                        enter = fadeIn(tween(BlurtDuration.medium, delayMillis = index * 55)) +
+                            slideInVertically(tween(BlurtDuration.medium, delayMillis = index * 55)) { it / 4 },
                         modifier = Modifier.animateItem(),
                     ) {
                         CaptureListItem(
                             capture = capture,
                             onClick = { onOpenCapture(capture.id) },
+                            onDelete = viewModel::delete,
                         )
                     }
                 }
@@ -131,12 +137,12 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(
     user: AuthUser,
+    themeMode: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
     onSearch: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        BlurtLogo(size = 34.dp)
-        Spacer(Modifier.width(12.dp))
         Column {
             Text(
                 text = "Blurt",
@@ -155,15 +161,22 @@ private fun HomeHeader(
                 imageVector = Icons.Filled.Search,
                 contentDescription = "Search",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
             )
         }
-        AccountMenu(user = user, onSignOut = onSignOut)
+        AccountMenu(
+            user = user,
+            themeMode = themeMode,
+            onThemeChange = onThemeChange,
+            onSignOut = onSignOut,
+        )
     }
 }
 
 /**
- * The prominent quick capture area. Tapping the surface starts a text blurt;
- * the four chips jump straight into a specific capture type.
+ * The prominent quick capture surface. Tapping it starts a text blurt; the
+ * pills jump straight into a specific capture type (Text is the emphasized,
+ * active type).
  */
 @Composable
 private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
@@ -171,7 +184,7 @@ private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
     Surface(
         onClick = { onCapture(CaptureType.TEXT) },
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(BlurtSpacing.xl),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier
@@ -179,7 +192,7 @@ private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
             .blurtPressScale(interactionSource),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            modifier = Modifier.padding(horizontal = BlurtSpacing.xl, vertical = 18.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -190,24 +203,25 @@ private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Add,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(BlurtSpacing.m))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CaptureType.entries.forEach { type ->
                     QuickTypeChip(
                         type = type,
+                        emphasized = type == CaptureType.TEXT,
                         onClick = { onCapture(type) },
                         modifier = Modifier.weight(1f),
                     )
@@ -220,6 +234,7 @@ private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
 @Composable
 private fun QuickTypeChip(
     type: CaptureType,
+    emphasized: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -227,8 +242,9 @@ private fun QuickTypeChip(
     Surface(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(BlurtSpacing.s),
+        color = if (emphasized) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
         modifier = modifier.blurtPressScale(interactionSource),
     ) {
         Row(
@@ -246,7 +262,8 @@ private fun QuickTypeChip(
             Text(
                 text = type.label,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (emphasized) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

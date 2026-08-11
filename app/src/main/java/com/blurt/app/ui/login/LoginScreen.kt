@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 32.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -122,7 +125,11 @@ fun LoginScreen(
     }
 }
 
-/** Google's primary sign-in button: white pill, G mark, dark label. */
+/**
+ * Google's primary sign-in button, theme-aware per the reference: a black
+ * pill with white label on the light theme, a white pill with dark label on
+ * the dark theme. The G mark stays full-color in both.
+ */
 @Composable
 private fun ContinueWithGoogleButton(
     isSigningIn: Boolean,
@@ -130,12 +137,15 @@ private fun ContinueWithGoogleButton(
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = rememberBlurtInteractionSource()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val pillColor = if (isDark) Color.White else Color.Black
+    val labelColor = if (isDark) Color(0xFF1F1F1F) else Color.White
     Surface(
         onClick = onClick,
         enabled = !isSigningIn,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(16.dp),
-        color = Color.White,
+        color = pillColor,
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
@@ -145,7 +155,7 @@ private fun ContinueWithGoogleButton(
             if (isSigningIn) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(22.dp),
-                    color = Color(0xFF1F1F1F),
+                    color = labelColor,
                     strokeWidth = 2.dp,
                 )
             } else {
@@ -162,7 +172,7 @@ private fun ContinueWithGoogleButton(
                     Text(
                         text = "Continue with Google",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Color(0xFF1F1F1F),
+                        color = labelColor,
                     )
                 }
             }

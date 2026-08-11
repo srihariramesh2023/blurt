@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,14 +22,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.data.model.Capture
-import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.CaptureListItem
 import com.blurt.app.ui.components.EmptyState
+import com.blurt.app.ui.theme.BlurtSpacing
 
 /**
  * Library: every capture, newest first.
@@ -46,7 +48,7 @@ fun LibraryScreen(
             .fillMaxSize()
             .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Library",
@@ -54,21 +56,23 @@ fun LibraryScreen(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onCaptureNew) {
+            IconButton(onClick = onCaptureNew, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Add,
                     contentDescription = "New blurt",
                     tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = if (captures.size == 1) "1 blurt" else "${captures.size} blurts",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(BlurtSpacing.l))
 
         if (captures.isEmpty()) {
             Spacer(Modifier.height(24.dp))
@@ -92,6 +96,7 @@ fun LibraryScreen(
                     CaptureListItem(
                         capture = capture,
                         onClick = { onOpenCapture(capture.id) },
+                        onDelete = viewModel::delete,
                         modifier = Modifier.animateItem(),
                     )
                 }
