@@ -42,6 +42,38 @@ A GitHub Actions workflow (`.github/workflows/build.yml`) builds the debug APK
 on every push to `main` and on pull requests, and uploads it as a build
 artifact.
 
+## Releases — zero-budget APK distribution
+
+Tagging a version builds a **signed release APK** and attaches it to a GitHub
+Release, so anyone can install Blurt straight from GitHub — no Play Store
+account (and its $25 fee) required:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow (`.github/workflows/release.yml`) uses the `BLURT_KEYSTORE_BASE64`
+secret plus `BLURT_KEYSTORE_PASSWORD` / `BLURT_KEY_ALIAS` /
+`BLURT_KEY_PASSWORD` (base64 of a `.jks` keystore and its credentials, set in
+**Settings → Secrets and variables → Actions**) when present. Until then it
+falls back to generating a keystore once and caching it, so releases stay
+installable — set the secrets before distributing widely so the signing key
+never changes.
+
+For local release builds, create a gitignored `keystore.properties` at the
+project root:
+
+```properties
+storeFile=my-keystore.jks
+storePassword=…
+keyAlias=…
+keyPassword=…
+```
+
+and run `./gradlew assembleRelease`. Without any keystore the release build
+stays unsigned (debug builds are unaffected).
+
 ## Authentication — provider-side setup
 
 The app is built and CI is green **without** any Firebase configuration. To

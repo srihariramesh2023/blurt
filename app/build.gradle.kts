@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -14,6 +17,36 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// --- Release signing ---------------------------------------------------------
+// The release APK is signed when a keystore is available: from a local
+// keystore.properties (gitignored, for personal builds) or from environment
+// variables (set by the CI workflow, which decodes the keystore secret). With
+// neither, the release build stays unsigned so local/CI debug builds never
+// break.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun signingProperty(name: String, env: String): String? =
+    keystoreProperties.getProperty(name) ?: System.getenv(env)
+
+val keystorePathRaw = System.getenv("KEYSTORE_FILE")
+    ?: keystoreProperties.getProperty("storeFile")
+val keystoreFile = keystorePathRaw?.let { raw ->
+    val f = File(raw)
+    if (f.isAbsolute) f else rootProject.file(raw)
+}
+// Note: these names deliberately differ from SigningConfig's members
+// (storePassword/keyAlias/keyPassword) — inside `create("release")` the
+// receiver's members would shadow the locals and the assignment would set
+// the property to itself.
+val ksStorePassword = signingProperty("storePassword", "KEYSTORE_PASSWORD")
+val ksKeyAlias = signingProperty("keyAlias", "KEY_ALIAS")
+val ksKeyPassword = signingProperty("keyPassword", "KEY_PASSWORD")
+val hasReleaseSigning = keystoreFile != null && keystoreFile.exists() &&
+    ksStorePassword != null && ksKeyAlias != null && ksKeyPassword != null
+
 android {
     namespace = "com.blurt.app"
     compileSdk = 35
@@ -26,6 +59,17 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = keystoreFile!!
+                storePassword = ksStorePassword
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -33,6 +77,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

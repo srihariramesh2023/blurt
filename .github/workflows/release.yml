@@ -1,0 +1,100 @@
+name: Android Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build signed release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # --- Signing key -------------------------------------------------------
+      # Preferred: the BLURT_KEYSTORE_BASE64 secret (base64 of a .jks) plus its
+      # password/alias secrets — stable forever, set once in repo Settings →
+      # Secrets and variables → Actions.
+      # Fallback (zero setup): generate a keystore once and keep it in the
+      # Actions cache so signing stays stable across releases. The password
+      # below is a documented stopgap; switch to the secret for production.
+      - name: Decode keystore from secret
+        if: env.BLURT_KEYSTORE_BASE64 != ''
+        env:
+          BLURT_KEYSTORE_BASE64: ${{ secrets.BLURT_KEYSTORE_BASE64 }}
+        run: echo "$BLURT_KEYSTORE_BASE64" | base64 -d > keystore.jks
+
+      - name: Restore keystore from cache
+        if: env.BLURT_KEYSTORE_BASE64 == ''
+        id: keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: keystore.jks
+          key: blurt-keystore-${{ github.repository }}
+
+      - name: Generate keystore
+        if: env.BLURT_KEYSTORE_BASE64 == '' && steps.keystore-cache.outputs.cache-hit != 'true'
+        run: |
+          keytool -genkeypair -v \
+            -keystore keystore.jks \
+            -alias blurt \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass blurt-release-signing \
+            -keypass blurt-release-signing \
+            -dname "CN=Blurt, OU=Mobile, O=Blurt, C=IN"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.BLURT_KEYSTORE_PASSWORD || 'blurt-release-signing' }}
+          KEY_ALIAS: ${{ secrets.BLURT_KEY_ALIAS || 'blurt' }}
+          KEY_PASSWORD: ${{ secrets.BLURT_KEY_PASSWORD || 'blurt-release-signing' }}
+        run: ./gradlew assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs \
+            app/build/outputs/apk/release/app-release.apk | head -4
+
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk \
+             "Blurt-${{ github.ref_name }}.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blurt-release-apk
+          path: Blurt-${{ github.ref_name }}.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "Blurt-${{ github.ref_name }}.apk" \
+            --generate-notes \
+            --title "Blurt ${{ github.ref_name }}"

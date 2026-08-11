@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Speech-bubble mark for the launcher icon (108dp adaptive-icon canvas). -->
+<!-- Speech-bubble mark with the Blurt spark, on the 108dp adaptive-icon canvas.
+     The bubble is white; the spark is the background amber so it reads as a
+     cutout, matching the in-app BlurtLogo mark. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -8,4 +10,7 @@
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M54,32c-13.3,0 -24,9.2 -24,20.5c0,6.2 3.4,11.7 8.8,15.3L36,76l9.3,-4.7c2.7,0.6 5.5,0.9 8.7,0.9c13.3,0 24,-9.2 24,-20.5S67.3,32 54,32z" />
+    <path
+        android:fillColor="#E3B16B"
+        android:pathData="M54,38.25L60.075,50.175L72,56.25L60.075,62.325L54,74.25L47.925,62.325L36,56.25L47.925,50.175Z" />
 </vector>

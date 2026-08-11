@@ -9,6 +9,11 @@ local.properties
 # Firebase per-project config (contains app identifiers/secrets)
 google-services.json
 
+# Release signing keystore (never commit key material)
+keystore.properties
+*.jks
+*.keystore
+
 # Android SDK installed locally for CLI-only builds
 .android-sdk/
 
