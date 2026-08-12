@@ -30,7 +30,8 @@ class GroqCaptureAnalyzer(
                 val raw = post(content, nowEpochMillis)
                 val jsonText = extractContent(raw) ?: return@withContext null
                 CaptureAnalysisParser.parse(jsonText)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "analyze failed: ${e::class.simpleName}: ${e.message}")
                 null
             }
         }
@@ -69,6 +70,7 @@ class GroqCaptureAnalyzer(
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
+                android.util.Log.w(TAG, "HTTP $code: ${raw.take(200)}")
                 throw IllegalStateException("Groq $code: ${raw.take(200)}")
             }
             return raw
@@ -78,6 +80,7 @@ class GroqCaptureAnalyzer(
     }
 
     companion object {
+        private const val TAG = "BlurtGroq"
         const val DEFAULT_MODEL = "llama-3.3-70b-versatile"
         private const val ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 

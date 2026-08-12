@@ -17,6 +17,16 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// The API keys above are read from local.properties at configuration time,
+// but Gradle does NOT track that file — so editing a key would silently leave
+// the previous build's BuildConfig in place (stale keys in old dex files).
+// Declaring it as an input makes every build-config task re-run on key edits.
+tasks.configureEach {
+    if (name == "generateDebugBuildConfig" || name == "generateReleaseBuildConfig") {
+        inputs.file(rootProject.file("local.properties"))
+    }
+}
+
 // --- Release signing ---------------------------------------------------------
 // The release APK is signed when a keystore is available: from a local
 // keystore.properties (gitignored, for personal builds) or from environment

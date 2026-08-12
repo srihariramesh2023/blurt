@@ -33,6 +33,11 @@ class BlurtApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        android.util.Log.d(
+            "BlurtAi",
+            "captureAnalyzer=${container.captureAnalyzer?.javaClass?.simpleName} " +
+                "groq=${BuildConfig.GROQ_API_KEY.isNotBlank()} gemini=${BuildConfig.GEMINI_API_KEY.isNotBlank()}",
+        )
     }
 }
 

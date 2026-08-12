@@ -134,7 +134,13 @@ class SyncEngine(
 
                 local == null -> dao.insert(remoteCapture.toEntity(uid))
                 local.syncState == SyncState.PENDING -> Unit // local edit wins; the upload will overwrite the remote
-                remoteCapture.updatedAt > local.updatedAt -> dao.update(
+                remoteCapture.updatedAt > local.updatedAt -> {
+                    android.util.Log.w(
+                        TAG,
+                        "OVERWRITE id=${local.id} remote.updatedAt=${remoteCapture.updatedAt} > local.updatedAt=${local.updatedAt} " +
+                            "remote.intent=${remoteCapture.intent}",
+                    )
+                    dao.update(
                     local.copy(
                         content = remoteCapture.content,
                         type = remoteCapture.type,
@@ -147,8 +153,13 @@ class SyncEngine(
                         syncState = SyncState.SYNCED,
                     )
                 )
+                }
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "BlurtSync"
     }
 }
 

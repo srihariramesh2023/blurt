@@ -15,6 +15,11 @@ class FallbackCaptureAnalyzer(
     override suspend fun analyze(content: String, nowEpochMillis: Long): CaptureAnalysis? {
         val first = runCatching { primary.analyze(content, nowEpochMillis) }.getOrNull()
         if (first != null) return first
+        android.util.Log.w(TAG, "primary (${primary::class.simpleName}) failed; falling back to ${secondary::class.simpleName}")
         return runCatching { secondary.analyze(content, nowEpochMillis) }.getOrNull()
+    }
+
+    private companion object {
+        const val TAG = "BlurtFallback"
     }
 }
