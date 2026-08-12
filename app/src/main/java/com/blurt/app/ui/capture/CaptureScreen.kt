@@ -1,8 +1,11 @@
 package com.blurt.app.ui.capture
 
-import androidx.compose.animation.AnimatedContent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -10,7 +13,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,13 +24,16 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -39,37 +44,39 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
-import com.blurt.app.ui.components.typeIcon
+import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.isHttpUrl
 import com.blurt.app.util.normalizedHttpUrl
 import com.blurt.app.util.urlDomain
 
 /**
- * The fast capture composer. One screen, three types, switchable at the top.
- * Editors cross-fade between types, and the save button reflects validity.
+ * The fast capture composer. No type selector — the user just types and Blurt
+ * decides (rules for links, AI for categories). When the AI finds a concrete
+ * time, a confirm sheet offers a priority reminder before anything is saved.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     viewModel: CaptureViewModel = viewModel(factory = CaptureViewModel.Factory),
 ) {
-    val type by viewModel.type.collectAsStateWithLifecycle()
     val content by viewModel.content.collectAsStateWithLifecycle()
+    val analyzing by viewModel.analyzing.collectAsStateWithLifecycle()
+    val pendingReminder by viewModel.pendingReminder.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val notice by viewModel.notice.collectAsStateWithLifecycle()
     val saved by viewModel.saved.collectAsStateWithLifecycle()
 
     LaunchedEffect(saved) {
@@ -79,17 +86,21 @@ fun CaptureScreen(
         }
     }
 
-    val canSave = when (type) {
-        CaptureType.TEXT, CaptureType.IDEA -> content.isNotBlank()
-        CaptureType.LINK -> content.isNotBlank() && content.normalizedHttpUrl().isHttpUrl()
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.confirmReminder() else viewModel.dismissReminder(notificationsBlocked = true)
     }
+
+    val canSave = content.isNotBlank() && !analyzing && pendingReminder == null
     val saveSource = rememberBlurtInteractionSource()
 
-    // Autofocus the text editor once on open; don't fight the user on later type switches.
-    val textFocusRequester = remember { FocusRequester() }
+    // Autofocus the editor once on open; don't fight the user afterward.
+    val textFocusRequester = FocusRequester()
     var autofocused by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if ((type == CaptureType.TEXT || type == CaptureType.IDEA) && !autofocused) {
+        if (!autofocused) {
             textFocusRequester.requestFocus()
             autofocused = true
         }
@@ -103,31 +114,40 @@ fun CaptureScreen(
     ) {
         BlurtTopBar(title = "New Blurt", onBack = onBack)
         Spacer(Modifier.height(14.dp))
-        TypeSelector(selected = type, onSelect = viewModel::onTypeSelected)
-        Spacer(Modifier.height(20.dp))
 
-        AnimatedContent(
-            targetState = type,
-            transitionSpec = {
-                (fadeIn(tween(200)) + slideInVertically(tween(260)) { it / 10 })
-                    .togetherWith(fadeOut(tween(120)))
+        val normalized = content.normalizedHttpUrl()
+        val isLink = content.isNotBlank() && normalized.isHttpUrl()
+        TextField(
+            value = content,
+            onValueChange = viewModel::onContentChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 240.dp)
+                .focusRequester(textFocusRequester),
+            placeholder = { Text("What's on your mind?", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            shape = RoundedCornerShape(20.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
+        Spacer(Modifier.height(10.dp))
+        // Quiet helper: what Blurt understood so far.
+        Text(
+            text = when {
+                isLink -> "Link blurt · opens ${normalized.urlDomain()}"
+                content.isNotBlank() -> "I'll figure out where this belongs."
+                else -> "Blurt anything — text, ideas, links."
             },
-            label = "typeEditor",
-        ) { currentType ->
-            when (currentType) {
-                CaptureType.TEXT, CaptureType.IDEA -> TextEditor(
-                    value = content,
-                    hint = if (currentType == CaptureType.TEXT) "What's on your mind?" else "A fleeting idea…",
-                    onValueChange = viewModel::onContentChange,
-                    focusRequester = textFocusRequester,
-                )
-
-                CaptureType.LINK -> LinkEditor(
-                    value = content,
-                    onValueChange = viewModel::onContentChange,
-                )
-            }
-        }
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         AnimatedVisibility(
             visible = error != null,
@@ -139,6 +159,19 @@ fun CaptureScreen(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = notice != null,
+            enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+        ) {
+            notice?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -160,135 +193,95 @@ fun CaptureScreen(
                 disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ),
         ) {
-            Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
+            if (analyzing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.size(8.dp))
+                Text("Analyzing…", style = MaterialTheme.typography.labelLarge)
+            } else {
+                Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
+            }
         }
         Spacer(Modifier.height(20.dp))
     }
-}
 
-/** Segmented Text / Idea / Link selector with spring color transitions. */
-@Composable
-private fun TypeSelector(selected: CaptureType, onSelect: (CaptureType) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        CaptureType.entries.forEach { type ->
-            val isSelected = type == selected
-            val background by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                animationSpec = tween(200),
-                label = "typeBg",
-            )
-            val foreground by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                animationSpec = tween(200),
-                label = "typeFg",
-            )
-            Surface(
-                onClick = { onSelect(type) },
-                shape = RoundedCornerShape(12.dp),
-                color = background,
-                modifier = Modifier.weight(1f),
+    // Confirm sheet: the AI found a time — set a reminder or just save.
+    pendingReminder?.let { pending ->
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.dismissReminder() },
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(vertical = 9.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
-                    Icon(
-                        imageVector = typeIcon(type),
-                        contentDescription = null,
-                        tint = foreground,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.height(2.dp))
                     Text(
-                        text = type.label,
+                        text = pending.category.label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = foreground,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Remind me at ${TimeFormat.full(pending.at)}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "A Blurt notification will pop up when it's time.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(24.dp))
+                val remindSource = rememberBlurtInteractionSource()
+                Button(
+                    onClick = {
+                        if (needsNotificationPermission(context)) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            viewModel.confirmReminder()
+                        }
+                    },
+                    interactionSource = remindSource,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .blurtPressScale(remindSource),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Text("Remind me", style = MaterialTheme.typography.labelLarge)
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = { viewModel.dismissReminder() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                ) {
+                    Text("Just save", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(28.dp))
             }
         }
     }
 }
 
-@Composable
-private fun TextEditor(
-    value: String,
-    hint: String,
-    onValueChange: (String) -> Unit,
-    focusRequester: FocusRequester,
-) {
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 240.dp)
-            .focusRequester(focusRequester),
-        placeholder = { Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = MaterialTheme.colorScheme.onSurface,
-        ),
-        shape = RoundedCornerShape(20.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            cursorColor = MaterialTheme.colorScheme.primary,
-        ),
-    )
-}
-
-@Composable
-private fun LinkEditor(value: String, onValueChange: (String) -> Unit) {
-    val normalized = value.normalizedHttpUrl()
-    val isValid = value.isNotBlank() && normalized.isHttpUrl()
-    val helperColor = when {
-        value.isBlank() -> MaterialTheme.colorScheme.onSurfaceVariant
-        isValid -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.error
-    }
-
-    Column {
-        TextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Paste a link", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Done,
-            ),
-            shape = RoundedCornerShape(20.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary,
-            ),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = when {
-                value.isBlank() -> "Paste a link to save it as a blurt."
-                isValid -> "Opens ${normalized.urlDomain()}"
-                else -> "That doesn't look like a valid link yet."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = helperColor,
-        )
-    }
-}
+/** Android 13+ needs a runtime grant before any notification can be posted. */
+private fun needsNotificationPermission(context: android.content.Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED

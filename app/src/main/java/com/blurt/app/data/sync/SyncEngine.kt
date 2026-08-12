@@ -92,6 +92,8 @@ class SyncEngine(
                     remoteId = remoteId,
                     content = capture.content,
                     type = capture.type,
+                    category = capture.category,
+                    reminderAt = capture.reminderAt,
                     createdAt = capture.createdAt,
                     updatedAt = capture.updatedAt,
                 ),
@@ -133,6 +135,8 @@ class SyncEngine(
                     local.copy(
                         content = remoteCapture.content,
                         type = remoteCapture.type,
+                        category = remoteCapture.category,
+                        reminderAt = remoteCapture.reminderAt,
                         updatedAt = remoteCapture.updatedAt,
                         syncState = SyncState.SYNCED,
                     )
@@ -148,6 +152,8 @@ private fun RemoteCapture.toEntity(ownerId: String): CaptureEntity = CaptureEnti
     syncState = SyncState.SYNCED,
     content = content,
     type = type,
+    category = category,
+    reminderAt = reminderAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

@@ -91,4 +91,30 @@ interface CaptureDao {
     /** Raw lookup including tombstones — used by tests to inspect sync state. */
     @Query("SELECT * FROM captures WHERE id = :id LIMIT 1")
     suspend fun getByIdIncludingDeleted(id: Long): CaptureEntity?
+
+    // --- AI categorization ------------------------------------------------
+
+    /**
+     * Captures the analyzer hasn't tagged yet, for lazy backfill. Links are
+     * classified by rule (a URL is a Link), never by AI, so they're skipped.
+     */
+    @Query(
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND category IS NULL " +
+            "AND type != 'LINK' AND deletedAt IS NULL ORDER BY createdAt ASC"
+    )
+    suspend fun getUncategorized(ownerId: String): List<CaptureEntity>
+
+    /** Assigns an AI category; the row re-syncs so it reaches other devices. */
+    @Query(
+        "UPDATE captures SET category = :category, updatedAt = :updatedAt, " +
+            "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
+    )
+    suspend fun setCategory(id: Long, ownerId: String, category: String, updatedAt: Long)
+
+    /** Future reminders of the user — used to reschedule after a reboot. */
+    @Query(
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+            "AND reminderAt IS NOT NULL AND reminderAt > :now ORDER BY reminderAt ASC"
+    )
+    suspend fun getUpcomingReminders(ownerId: String, now: Long): List<CaptureEntity>
 }

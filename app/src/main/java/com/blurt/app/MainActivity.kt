@@ -60,12 +60,31 @@ import com.blurt.app.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Set when the app is opened from a reminder notification; the scaffold
+     * navigates straight to that blurt and clears it. Survives onNewIntent
+     * (warm start from the notification shade) via [setIntent].
+     */
+    val openCaptureId = androidx.compose.runtime.mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        openCaptureId.value = intent.getLongExtra(EXTRA_OPEN_CAPTURE_ID, -1L).takeIf { it > 0 }
         setContent {
-            BlurtAppRoot()
+            BlurtAppRoot(openCaptureId = openCaptureId)
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openCaptureId.value = intent.getLongExtra(EXTRA_OPEN_CAPTURE_ID, -1L).takeIf { it > 0 }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_CAPTURE_ID = "blurt.open.captureId"
     }
 }
 
@@ -75,7 +94,9 @@ class MainActivity : ComponentActivity() {
  * login screen never flashes while the session is being restored.
  */
 @Composable
-private fun BlurtAppRoot() {
+private fun BlurtAppRoot(
+    openCaptureId: androidx.compose.runtime.MutableState<Long?>,
+) {
     val app = LocalContext.current.applicationContext as BlurtApp
     val authState by app.container.authRepository.authState.collectAsStateWithLifecycle()
     val themeMode by app.container.themeMode.collectAsStateWithLifecycle()
@@ -119,6 +140,7 @@ private fun BlurtAppRoot() {
                     themeMode = themeMode,
                     onThemeChange = { app.container.themePreferences.setThemeMode(it) },
                     onSignOut = { scope.launch { app.container.authRepository.signOut() } },
+                    openCaptureId = openCaptureId,
                 )
             }
         }
@@ -145,12 +167,21 @@ private fun BlurtMainScaffold(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
+    openCaptureId: androidx.compose.runtime.MutableState<Long?>,
 ) {
     // A fresh nav controller per session, so signing out and back in never
     // resurfaces the previous user's navigation state.
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    // Opened from a reminder notification → jump straight to that blurt.
+    val pendingId by openCaptureId
+    LaunchedEffect(pendingId) {
+        val id = pendingId ?: return@LaunchedEffect
+        navController.navigate(BlurtRoutes.detail(id)) { launchSingleTop = true }
+        openCaptureId.value = null
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

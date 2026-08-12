@@ -212,11 +212,33 @@ private fun DetailContent(
                     )
                 }
             }
+            capture.category?.let { category ->
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Text(
+                        text = category.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 text = TimeFormat.full(capture.createdAt.toEpochMilli()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        capture.reminderAt?.let { reminderAt ->
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Reminder · ${TimeFormat.full(reminderAt.toEpochMilli())}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
         Spacer(Modifier.height(24.dp))

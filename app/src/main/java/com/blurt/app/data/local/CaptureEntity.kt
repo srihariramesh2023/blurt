@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.blurt.app.data.model.Capture
+import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureType
 import java.time.Instant
 
@@ -31,6 +32,13 @@ data class CaptureEntity(
     val content: String,
     val type: CaptureType,
     /**
+     * AI-assigned topic from the fixed CaptureCategory list, stored as the
+     * enum name; null until the analyzer has classified this blurt.
+     */
+    val category: String? = null,
+    /** When a priority Blurt notification was scheduled; null otherwise. */
+    val reminderAt: Long? = null,
+    /**
      * Set when the user deletes; the row is removed locally only after the
      * backend delete is confirmed, so deletes propagate across devices.
      */
@@ -45,6 +53,9 @@ fun CaptureEntity.toDomain(): Capture = Capture(
     remoteId = remoteId,
     content = content,
     type = type,
+    // null stays null (not yet classified); an unknown stored name degrades to OTHER.
+    category = category?.let(CaptureCategory::fromName),
+    reminderAt = reminderAt?.let(Instant::ofEpochMilli),
     createdAt = Instant.ofEpochMilli(createdAt),
     updatedAt = Instant.ofEpochMilli(updatedAt),
 )
@@ -55,6 +66,8 @@ fun Capture.toEntity(): CaptureEntity = CaptureEntity(
     remoteId = remoteId,
     content = content,
     type = type,
+    category = category?.name,
+    reminderAt = reminderAt?.toEpochMilli(),
     createdAt = createdAt.toEpochMilli(),
     updatedAt = updatedAt.toEpochMilli(),
 )

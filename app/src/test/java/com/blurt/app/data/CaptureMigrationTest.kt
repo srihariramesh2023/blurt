@@ -144,6 +144,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_2_3,
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
+                BlurtDatabase.MIGRATION_5_6,
             )
             .build()
         val repository = CaptureRepository(database.captureDao())
@@ -192,6 +193,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_2_3,
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
+                BlurtDatabase.MIGRATION_5_6,
             )
             .build()
 
@@ -246,7 +248,10 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_4_5)
+            .addMigrations(
+                BlurtDatabase.MIGRATION_4_5,
+                BlurtDatabase.MIGRATION_5_6,
+            )
             .build()
 
         // Room validates the new schema — the embeddings table must exist with
@@ -267,6 +272,66 @@ class CaptureMigrationTest {
         database.close()
     }
 
+    private fun v5Schema() = createDatabaseAt(5) {
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `captures` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`ownerId` TEXT, " +
+                "`remoteId` TEXT, " +
+                "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                "`content` TEXT NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`deletedAt` INTEGER, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_embeddings` (" +
+                "`captureId` INTEGER NOT NULL PRIMARY KEY, " +
+                "`ownerId` TEXT NOT NULL, " +
+                "`embedding` BLOB NOT NULL, " +
+                "`model` TEXT NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL(
+            "INSERT INTO `captures` (ownerId, remoteId, syncState, content, type, createdAt, updatedAt) " +
+                "VALUES ('uid-existing-user', 'remote-1', 'SYNCED', 'kept note', 'TEXT', 1000, 1000)"
+        )
+    }
+
+    @Test
+    fun migrate5To6_addsCategoryAndReminderColumnsKeepsRows() = runTest {
+        v5Schema().use { v5 ->
+            BlurtDatabase.MIGRATION_5_6.migrate(v5)
+            v5.version = 6
+        }
+
+        val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
+            .addMigrations(BlurtDatabase.MIGRATION_5_6)
+            .build()
+
+        // Existing rows survive, uncategorized and without reminders — the
+        // analyzer backfills them lazily.
+        val repo = CaptureRepository(database.captureDao())
+        val all = repo.observeAll("uid-existing-user").first()
+        assertEquals(1, all.size)
+        assertNull(all.single().category)
+        assertNull(all.single().reminderAt)
+        assertEquals("kept note", all.single().content)
+
+        // The new columns are queryable — a category can be written and read back.
+        val dao = database.captureDao()
+        val entity = dao.getById(all.single().id, "uid-existing-user")!!
+        dao.update(entity.copy(category = "TRAVEL", reminderAt = 1234L))
+        val updated = repo.observeAll("uid-existing-user").first().single()
+        assertEquals(com.blurt.app.data.model.CaptureCategory.TRAVEL, updated.category)
+        assertEquals(1234L, updated.reminderAt?.toEpochMilli())
+
+        database.close()
+    }
+
     @Test
     fun migrate3To4_dropsImageColumnsAndConvertsImageRowsToText() = runTest {
         v3Schema().use { v3 ->
@@ -278,6 +343,7 @@ class CaptureMigrationTest {
             .addMigrations(
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
+                BlurtDatabase.MIGRATION_5_6,
             )
             .build()
 

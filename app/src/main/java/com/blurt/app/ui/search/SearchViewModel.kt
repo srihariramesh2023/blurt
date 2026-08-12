@@ -12,6 +12,7 @@ import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.local.toDomain
 import com.blurt.app.data.model.Capture
+import com.blurt.app.notifications.ReminderScheduler
 import com.blurt.app.util.escapeLikePattern
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -38,6 +39,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class SearchViewModel(
     private val repository: CaptureRepository,
+    private val reminderScheduler: ReminderScheduler?,
     private val authState: StateFlow<AuthState>,
     private val semanticSearch: SemanticSearchEngine?,
 ) : ViewModel() {
@@ -74,6 +76,7 @@ class SearchViewModel(
     fun delete(id: Long) {
         viewModelScope.launch {
             val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            reminderScheduler?.cancel(id)
             repository.delete(id, uid)
         }
     }
@@ -86,6 +89,7 @@ class SearchViewModel(
                 val app = this[APPLICATION_KEY] as BlurtApp
                 SearchViewModel(
                     repository = app.container.captureRepository,
+                    reminderScheduler = app.container.reminderScheduler,
                     authState = app.container.authRepository.authState,
                     semanticSearch = app.container.semanticSearch,
                 )

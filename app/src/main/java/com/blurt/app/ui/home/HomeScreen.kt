@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,14 +42,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.auth.AuthUser
-import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.AccountMenu
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.CaptureListItem
 import com.blurt.app.ui.components.EmptyState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
-import com.blurt.app.ui.components.typeIcon
 import com.blurt.app.ui.theme.BlurtDuration
 import com.blurt.app.ui.theme.BlurtSpacing
 import com.blurt.app.ui.theme.ThemeMode
@@ -66,7 +63,7 @@ fun HomeScreen(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
-    onCapture: (CaptureType) -> Unit,
+    onCapture: () -> Unit,
     onOpenCapture: (Long) -> Unit,
     onOpenLibrary: () -> Unit,
     onSearch: () -> Unit,
@@ -174,15 +171,14 @@ private fun HomeHeader(
 }
 
 /**
- * The prominent quick capture surface. Tapping it starts a text blurt; the
- * pills jump straight into a specific capture type (Text is the emphasized,
- * active type).
+ * The prominent quick capture surface. One tap, no decisions — Blurt figures
+ * out what the blurt is (rules for links, AI for categories and reminders).
  */
 @Composable
-private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
+private fun QuickCaptureCard(onCapture: () -> Unit) {
     val interactionSource = rememberBlurtInteractionSource()
     Surface(
-        onClick = { onCapture(CaptureType.TEXT) },
+        onClick = onCapture,
         interactionSource = interactionSource,
         shape = RoundedCornerShape(BlurtSpacing.xl),
         color = MaterialTheme.colorScheme.surface,
@@ -191,80 +187,30 @@ private fun QuickCaptureCard(onCapture: (CaptureType) -> Unit) {
             .fillMaxWidth()
             .blurtPressScale(interactionSource),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = BlurtSpacing.xl, vertical = 18.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "What's on your mind?",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(BlurtSpacing.m))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CaptureType.entries.forEach { type ->
-                    QuickTypeChip(
-                        type = type,
-                        emphasized = type == CaptureType.TEXT,
-                        onClick = { onCapture(type) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickTypeChip(
-    type: CaptureType,
-    emphasized: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interactionSource = rememberBlurtInteractionSource()
-    Surface(
-        onClick = onClick,
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(BlurtSpacing.s),
-        color = if (emphasized) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceVariant,
-        modifier = modifier.blurtPressScale(interactionSource),
-    ) {
         Row(
-            modifier = Modifier.padding(vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = BlurtSpacing.xl, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(
-                imageVector = typeIcon(type),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(15.dp),
-            )
-            Spacer(Modifier.width(6.dp))
             Text(
-                text = type.label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (emphasized) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "What's on your mind?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
             )
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }

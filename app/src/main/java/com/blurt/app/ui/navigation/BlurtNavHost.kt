@@ -8,7 +8,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.blurt.app.auth.AuthUser
-import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.capture.CaptureScreen
 import com.blurt.app.ui.detail.DetailScreen
 import com.blurt.app.ui.home.HomeScreen
@@ -20,10 +19,10 @@ object BlurtRoutes {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val SEARCH = "search"
-    const val CAPTURE = "capture/{type}"
+    /** The composer has no type anymore — Blurt decides what a blurt is. */
+    const val CAPTURE = "capture"
     const val DETAIL = "detail/{id}"
 
-    fun capture(type: CaptureType) = "capture/${type.name.lowercase()}"
     fun detail(id: Long) = "detail/$id"
 }
 
@@ -47,7 +46,7 @@ fun BlurtNavHost(
                 themeMode = themeMode,
                 onThemeChange = onThemeChange,
                 onSignOut = onSignOut,
-                onCapture = { navController.navigate(BlurtRoutes.capture(it)) },
+                onCapture = { navController.navigate(BlurtRoutes.CAPTURE) },
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
                 onOpenLibrary = { navController.navigate(BlurtRoutes.LIBRARY) },
                 onSearch = { navController.navigate(BlurtRoutes.SEARCH) },
@@ -56,7 +55,7 @@ fun BlurtNavHost(
         composable(BlurtRoutes.LIBRARY) {
             LibraryScreen(
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
-                onCaptureNew = { navController.navigate(BlurtRoutes.capture(CaptureType.TEXT)) },
+                onCaptureNew = { navController.navigate(BlurtRoutes.CAPTURE) },
             )
         }
         composable(BlurtRoutes.SEARCH) {
@@ -64,10 +63,7 @@ fun BlurtNavHost(
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
             )
         }
-        composable(
-            route = BlurtRoutes.CAPTURE,
-            arguments = listOf(navArgument("type") { type = NavType.StringType }),
-        ) {
+        composable(BlurtRoutes.CAPTURE) {
             CaptureScreen(
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },

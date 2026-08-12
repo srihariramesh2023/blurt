@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [CaptureEntity::class, EmbeddingEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(
@@ -97,6 +97,19 @@ abstract class BlurtDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS index_capture_embeddings_ownerId " +
                         "ON capture_embeddings(ownerId)"
                 )
+            }
+        }
+
+        /**
+         * v5 → v6: adds the AI capture analysis. `category` stores the fixed
+         * CaptureCategory enum name (null = not yet classified); `reminderAt`
+         * is when a priority notification was scheduled for. Existing rows
+         * default to NULL — they are backfilled lazily by the analyzer.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE captures ADD COLUMN category TEXT")
+                db.execSQL("ALTER TABLE captures ADD COLUMN reminderAt INTEGER")
             }
         }
     }

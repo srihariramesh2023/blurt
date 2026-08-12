@@ -35,6 +35,8 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
             mapOf(
                 "content" to capture.content,
                 "type" to capture.type.name,
+                "category" to capture.category,
+                "reminderAt" to capture.reminderAt,
                 "createdAt" to capture.createdAt,
                 "updatedAt" to capture.updatedAt,
                 "deleted" to false,
@@ -60,6 +62,9 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                         // Unknown/legacy types (the removed IMAGE) degrade to TEXT.
                         type = runCatching { CaptureType.valueOf(typeName) }
                             .getOrDefault(CaptureType.TEXT),
+                        category = data["category"] as? String,
+                        reminderAt = (data["reminderAt"] as? Long)
+                            ?: (data["reminderAt"] as? Number)?.toLong(),
                         createdAt = (data["createdAt"] as? Long) ?: 0L,
                         updatedAt = (data["updatedAt"] as? Long) ?: 0L,
                         deleted = (data["deleted"] as? Boolean) ?: false,

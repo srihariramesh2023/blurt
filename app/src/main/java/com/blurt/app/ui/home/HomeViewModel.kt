@@ -10,6 +10,7 @@ import com.blurt.app.BlurtApp
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.model.Capture
+import com.blurt.app.notifications.ReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val repository: CaptureRepository,
+    private val reminderScheduler: ReminderScheduler?,
     private val authState: StateFlow<AuthState>,
 ) : ViewModel() {
 
@@ -38,6 +40,7 @@ class HomeViewModel(
     fun delete(id: Long) {
         viewModelScope.launch {
             val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            reminderScheduler?.cancel(id)
             repository.delete(id, uid)
         }
     }
@@ -50,6 +53,7 @@ class HomeViewModel(
                 val app = this[APPLICATION_KEY] as BlurtApp
                 HomeViewModel(
                     repository = app.container.captureRepository,
+                    reminderScheduler = app.container.reminderScheduler,
                     authState = app.container.authRepository.authState,
                 )
             }

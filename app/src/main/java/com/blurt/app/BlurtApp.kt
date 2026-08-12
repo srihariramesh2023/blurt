@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.room.Room
+import com.blurt.app.ai.CategoryBackfiller
+import com.blurt.app.ai.GeminiCaptureAnalyzer
 import com.blurt.app.ai.GeminiEmbeddingProvider
 import com.blurt.app.ai.SemanticSearchEngine
 import com.blurt.app.auth.AuthRepository
@@ -12,6 +14,7 @@ import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.sync.RtdbCaptureRemote
 import com.blurt.app.data.sync.SyncEngine
+import com.blurt.app.notifications.ReminderScheduler
 import com.blurt.app.ui.theme.ThemeMode
 import com.blurt.app.ui.theme.ThemePreferences
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +51,7 @@ class AppContainer(context: Context) {
             BlurtDatabase.MIGRATION_2_3,
             BlurtDatabase.MIGRATION_3_4,
             BlurtDatabase.MIGRATION_4_5,
+            BlurtDatabase.MIGRATION_5_6,
         )
         .build()
 
@@ -59,6 +63,24 @@ class AppContainer(context: Context) {
     val captureRepository: CaptureRepository = CaptureRepository(
         dao = database.captureDao(),
     )
+
+    val reminderScheduler = ReminderScheduler(context)
+
+    /**
+     * Capture analysis (category + time extraction) is enabled only when a
+     * Gemini API key was supplied at build time. With no key it is null and
+     * saving falls back to the rule-based Link detection with no category —
+     * the app stays fully usable offline or unconfigured.
+     */
+    val captureAnalyzer: GeminiCaptureAnalyzer? = if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
+        GeminiCaptureAnalyzer(
+            apiKey = BuildConfig.GEMINI_API_KEY,
+            packageName = context.packageName,
+            certSha1 = signingCertSha1(context),
+        )
+    } else {
+        null
+    }
 
     // Semantic search is enabled only when a Gemini API key was supplied at
     // build time (local.properties gemini.apiKey / GEMINI_API_KEY env). With
@@ -83,6 +105,16 @@ class AppContainer(context: Context) {
         scope = appScope,
         dao = database.captureDao(),
         remote = captureRemote,
+        authState = authRepository.authState,
+    ).also { it.start() }
+
+    // Tags pre-existing blurts (saved before analysis existed, or offline)
+    // with their AI category in the background after each sign-in.
+    @Suppress("unused")
+    private val categoryBackfiller = CategoryBackfiller(
+        scope = appScope,
+        repository = captureRepository,
+        analyzer = captureAnalyzer,
         authState = authRepository.authState,
     ).also { it.start() }
 

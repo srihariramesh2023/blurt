@@ -88,14 +88,36 @@ fun CaptureListItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "${capture.type.label} · ${TimeFormat.relative(capture.createdAt.toEpochMilli())}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${capture.type.label} · ${TimeFormat.relative(capture.createdAt.toEpochMilli())}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    capture.category?.let { category ->
+                        Spacer(Modifier.width(6.dp))
+                        CategoryPill(label = category.label)
+                    }
+                }
             }
             OverflowMenu(capture = capture, onDelete = onDelete)
         }
+    }
+}
+
+/** Small muted topic tag — the AI's category, shown quietly next to the meta. */
+@Composable
+private fun CategoryPill(label: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
 

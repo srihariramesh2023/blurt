@@ -5,6 +5,7 @@ import com.blurt.app.data.local.CaptureEntity
 import com.blurt.app.data.local.SyncState
 import com.blurt.app.data.local.toDomain
 import com.blurt.app.data.model.Capture
+import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.util.escapeLikePattern
 import java.util.UUID
@@ -40,7 +41,13 @@ class CaptureRepository(
     suspend fun searchOnce(query: String, ownerId: String): List<Capture> =
         dao.searchOnce(query.escapeLikePattern(), ownerId).map(CaptureEntity::toDomain)
 
-    suspend fun create(ownerId: String, type: CaptureType, content: String): Long {
+    suspend fun create(
+        ownerId: String,
+        type: CaptureType,
+        content: String,
+        category: CaptureCategory? = null,
+        reminderAt: Long? = null,
+    ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
             CaptureEntity(
@@ -49,6 +56,8 @@ class CaptureRepository(
                 syncState = SyncState.PENDING,
                 content = content.trim(),
                 type = type,
+                category = category?.name,
+                reminderAt = reminderAt,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -78,4 +87,17 @@ class CaptureRepository(
     suspend fun claimUnowned(ownerId: String) {
         dao.claimUnowned(ownerId)
     }
+
+    /** Captures the AI hasn't tagged yet — links are classified by rule, never by AI. */
+    suspend fun getUncategorized(ownerId: String): List<Capture> =
+        dao.getUncategorized(ownerId).map(CaptureEntity::toDomain)
+
+    /** Assigns an AI category and re-queues the row for sync. */
+    suspend fun setCategory(id: Long, ownerId: String, category: CaptureCategory) {
+        dao.setCategory(id, ownerId, category.name, System.currentTimeMillis())
+    }
+
+    /** Future reminders of the user — the boot receiver reschedules these. */
+    suspend fun getUpcomingReminders(ownerId: String): List<Capture> =
+        dao.getUpcomingReminders(ownerId, System.currentTimeMillis()).map(CaptureEntity::toDomain)
 }

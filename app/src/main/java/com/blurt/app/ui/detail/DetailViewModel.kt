@@ -12,6 +12,7 @@ import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.notifications.ReminderScheduler
 import com.blurt.app.util.isHttpUrl
 import com.blurt.app.util.normalizedHttpUrl
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,6 +28,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class DetailViewModel(
     private val repository: CaptureRepository,
+    private val reminderScheduler: ReminderScheduler?,
     private val authState: StateFlow<AuthState>,
     private val captureId: Long,
 ) : ViewModel() {
@@ -90,6 +92,8 @@ class DetailViewModel(
     fun delete() {
         viewModelScope.launch {
             val uid = currentUid() ?: return@launch
+            // Drop any pending reminder alarm before the row is tombstoned.
+            reminderScheduler?.cancel(captureId)
             repository.delete(captureId, uid)
             _deleted.value = true
         }
@@ -108,6 +112,7 @@ class DetailViewModel(
                 val id = createSavedStateHandle()["id"] as Long? ?: 0L
                 DetailViewModel(
                     repository = app.container.captureRepository,
+                    reminderScheduler = app.container.reminderScheduler,
                     authState = app.container.authRepository.authState,
                     captureId = id,
                 )
