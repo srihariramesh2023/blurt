@@ -6,8 +6,12 @@ with a dark-first, Apple-inspired design language.
 
 ## Features
 
-- **Capture**: blurts of three types — Text, Idea, Link — with a quick
-  capture surface on Home.
+- **Capture**: a unified editor — just type. Links are detected by rule;
+  everything else is classified by Gemini into a fixed category list, and
+  mentioned times become reminders.
+- **Reminders**: blurts that mention a time can be turned into **priority
+  Blurt notifications** (high-importance channel, heads-up banner) via a
+  confirm sheet at save time — no third-party alarms.
 - **Library**: every blurt, newest first.
 - **Search**: semantic search by meaning (Gemini's free embedding tier),
   with live keyword search as the always-on fallback.
@@ -170,7 +174,60 @@ user, live in the app database, and are dropped on sign-out. The key is
 embedded in the APK (it's a free-tier, rate-limited key) — restrict it to your
 app's package and SHA-1 in Google Cloud if you distribute widely.
 
-### 5. Session behavior
+### 5. AI capture — categories and reminders
+
+The manual **Text / Idea / Link selector is gone**. Saving a blurt is now a
+single action: type anything and tap **Save Blurt**.
+
+**How a blurt is understood**
+
+1. **Link detection (rules, no AI)**: if the content is a URL, it is saved as
+   a Link blurt (keeps the link icon in lists) and skips the AI entirely.
+2. **Classification (AI)**: everything else goes to Gemini
+   (`gemini-3.5-flash`, JSON mode) which picks a category from a **fixed
+   list** — Work, Personal, Health, Finance, Travel, Ideas, Learning, Home,
+   Fitness, Social, Shopping, Other. The list never grows: the AI only ever
+   chooses from it, so the Library can show one clean filter chip per
+   category (All / Work / Health / …).
+3. **Time extraction (AI, same call)**: if the blurt mentions a time ("yoga
+   class tomorrow at 6pm"), Gemini resolves it to an absolute instant in the
+   device's timezone.
+
+**The confirm sheet**
+
+If a time was detected, a sheet slides up before saving — *"Fitness · Remind
+me at Aug 13, 2026 · 6:00 PM"* — with **Remind me** / **Just save**. One tap
+either way; no time detected means the blurt saves instantly with no sheet.
+
+**The reminder**
+
+- Scheduled as an `RTC_WAKEUP` alarm → a **priority notification** on
+  Blurt's own high-importance channel (heads-up banner + sound), containing
+  the blurt text.
+- Tapping the notification deep-links to that exact blurt.
+- Alarms are rescheduled after a reboot (`BOOT_COMPLETED` receiver), and
+  cancelled when the blurt is deleted.
+- On Android 13+, the first reminder prompts for the notification
+  permission; blurts still save (and the reminder still shows in-app) if it
+  is denied.
+
+**Offline / no key**
+
+If Gemini is unreachable or no API key is configured, the blurt saves
+instantly as uncategorized (no sheet, no reminder) — capture never blocks on
+the network, mirroring the search fallback philosophy.
+
+**Categories for existing blurts**
+
+Old blurts are classified lazily in the background (a few per call, same
+pattern as embeddings), so the Library's filter chips work across your whole
+history without a manual step.
+
+Data-wise this is a Room **v6 migration**: `category` and `reminderAt`
+columns travel with the capture through the Realtime Database sync, so
+categories and reminders stay consistent across devices.
+
+### 6. Session behavior
 
 - **Persistence**: Firebase restores the signed-in session on launch. The app
   observes the auth state with a live listener, so the login screen never
