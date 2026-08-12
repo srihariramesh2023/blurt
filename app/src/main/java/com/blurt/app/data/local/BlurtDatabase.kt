@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [CaptureEntity::class, EmbeddingEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 @TypeConverters(
@@ -110,6 +110,22 @@ abstract class BlurtDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE captures ADD COLUMN category TEXT")
                 db.execSQL("ALTER TABLE captures ADD COLUMN reminderAt INTEGER")
+            }
+        }
+
+        /**
+         * v6 → v7: the V2 voice-first model. `intent` stores the fixed
+         * CaptureIntent enum name (note/task/idea/reminder, null until the
+         * analyzer runs); `isImportant` marks blurts the user (or the AI)
+         * called out; `isArchived` hides blurts from the main lists while
+         * keeping them browsable in Library → Archived. Existing rows default
+         * to unset/false and are backfilled lazily.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE captures ADD COLUMN intent TEXT")
+                db.execSQL("ALTER TABLE captures ADD COLUMN isImportant INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE captures ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

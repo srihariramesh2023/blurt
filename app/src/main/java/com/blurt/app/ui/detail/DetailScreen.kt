@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
@@ -72,12 +73,20 @@ fun DetailScreen(
     val editText by viewModel.editText.collectAsStateWithLifecycle()
     val editError by viewModel.editError.collectAsStateWithLifecycle()
     val deleted by viewModel.deleted.collectAsStateWithLifecycle()
+    val archived by viewModel.archived.collectAsStateWithLifecycle()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(deleted) {
         if (deleted) {
             viewModel.onDeletedHandled()
+            onBack()
+        }
+    }
+
+    LaunchedEffect(archived) {
+        if (archived) {
+            viewModel.onArchivedHandled()
             onBack()
         }
     }
@@ -95,7 +104,33 @@ fun DetailScreen(
                     TextButton(onClick = viewModel::cancelEditing) {
                         Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                } else if (capture != null) {
+                } else {
+                    val currentCapture = capture ?: return@BlurtTopBar
+                    val starSource = rememberBlurtInteractionSource()
+                    IconButton(
+                        onClick = viewModel::toggleImportant,
+                        interactionSource = starSource,
+                        modifier = Modifier.blurtPressScale(starSource),
+                    ) {
+                        Icon(
+                            imageVector = if (currentCapture.isImportant) BlurtIcons.Star else BlurtIcons.StarOutline,
+                            contentDescription = if (currentCapture.isImportant) "Unmark important" else "Mark important",
+                            tint = if (currentCapture.isImportant) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val archiveSource = rememberBlurtInteractionSource()
+                    IconButton(
+                        onClick = viewModel::archive,
+                        interactionSource = archiveSource,
+                        modifier = Modifier.blurtPressScale(archiveSource),
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Archive,
+                            contentDescription = "Archive",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     val editSource = rememberBlurtInteractionSource()
                     IconButton(
                         onClick = viewModel::startEditing,
@@ -212,19 +247,42 @@ private fun DetailContent(
                     )
                 }
             }
-            capture.category?.let { category ->
+            capture.intent?.let { intent ->
                 Spacer(Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
                     Text(
-                        text = category.label,
+                        text = intent.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
+            }
+            capture.category?.let { category ->
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        text = category.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            if (capture.isImportant) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = BlurtIcons.Star,
+                    contentDescription = "Important",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
             }
             Spacer(Modifier.weight(1f))
             Text(

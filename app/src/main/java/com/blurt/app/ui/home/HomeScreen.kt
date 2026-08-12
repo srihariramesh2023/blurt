@@ -1,10 +1,14 @@
 package com.blurt.app.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,11 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -63,6 +69,7 @@ fun HomeScreen(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
+    onVoice: () -> Unit,
     onCapture: () -> Unit,
     onOpenCapture: (Long) -> Unit,
     onOpenLibrary: () -> Unit,
@@ -80,12 +87,11 @@ fun HomeScreen(
     ) {
         Spacer(Modifier.height(BlurtSpacing.m))
         HomeHeader(user = user, themeMode = themeMode, onThemeChange = onThemeChange, onSignOut = onSignOut, onSearch = onSearch)
-        Spacer(Modifier.height(BlurtSpacing.xl))
-        QuickCaptureCard(onCapture = onCapture)
-        Spacer(Modifier.height(28.dp))
+        MicHero(onVoice = onVoice, onType = onCapture)
+        Spacer(Modifier.height(20.dp))
 
         if (captures.isEmpty()) {
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(20.dp))
             EmptyState(
                 icon = BlurtIcons.BlurtMark,
                 title = "Nothing here yet",
@@ -94,7 +100,7 @@ fun HomeScreen(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Recent",
+                    text = "Recent Blurts",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -123,6 +129,7 @@ fun HomeScreen(
                             capture = capture,
                             onClick = { onOpenCapture(capture.id) },
                             onDelete = viewModel::delete,
+                            onArchive = { id, _ -> viewModel.archive(id) },
                         )
                     }
                 }
@@ -171,45 +178,86 @@ private fun HomeHeader(
 }
 
 /**
- * The prominent quick capture surface. One tap, no decisions — Blurt figures
- * out what the blurt is (rules for links, AI for categories and reminders).
+ * The V2 home hero: a large mic and "What's on your mind?". Typing stays as
+ * the quiet secondary path — the mic must never compete with anything.
  */
 @Composable
-private fun QuickCaptureCard(onCapture: () -> Unit) {
+private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
     val interactionSource = rememberBlurtInteractionSource()
-    Surface(
-        onClick = onCapture,
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(BlurtSpacing.xl),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    val infinite = rememberInfiniteTransition(label = "homeMic")
+    val ringAlpha by infinite.animateFloat(
+        initialValue = 0.08f,
+        targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(tween(2_200, easing = LinearEasing), RepeatMode.Reverse),
+        label = "homeRing",
+    )
+    val ringScale by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(2_200, easing = LinearEasing), RepeatMode.Reverse),
+        label = "homeRingScale",
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .blurtPressScale(interactionSource),
+            .height(300.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = BlurtSpacing.xl, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(168.dp)
+                        .scale(ringScale)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha)),
+                )
+                Surface(
+                    onClick = onVoice,
+                    interactionSource = interactionSource,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(124.dp)
+                        .blurtPressScale(interactionSource),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = BlurtIcons.Mic,
+                            contentDescription = "Speak a blurt",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(48.dp),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(26.dp))
             Text(
                 text = "What's on your mind?",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.weight(1f))
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center,
-            ) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Tap the mic and say it — Blurt figures out the rest.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(10.dp))
+            val typeSource = rememberBlurtInteractionSource()
+            TextButton(onClick = onType, interactionSource = typeSource, modifier = Modifier.blurtPressScale(typeSource)) {
                 Icon(
-                    imageVector = Icons.Filled.Add,
+                    imageVector = BlurtIcons.Keyboard,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
                 )
+                Spacer(Modifier.width(6.dp))
+                Text("Type instead", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -9,6 +9,7 @@ import com.blurt.app.data.local.BlurtDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -145,6 +146,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
+                BlurtDatabase.MIGRATION_6_7,
             )
             .build()
         val repository = CaptureRepository(database.captureDao())
@@ -194,6 +196,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
+                BlurtDatabase.MIGRATION_6_7,
             )
             .build()
 
@@ -251,6 +254,7 @@ class CaptureMigrationTest {
             .addMigrations(
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
+                BlurtDatabase.MIGRATION_6_7,
             )
             .build()
 
@@ -309,7 +313,7 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_5_6)
+            .addMigrations(BlurtDatabase.MIGRATION_5_6, BlurtDatabase.MIGRATION_6_7)
             .build()
 
         // Existing rows survive, uncategorized and without reminders — the
@@ -344,6 +348,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_3_4,
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
+                BlurtDatabase.MIGRATION_6_7,
             )
             .build()
 
@@ -375,6 +380,74 @@ class CaptureMigrationTest {
         assertEquals("SYNCED", cursor.getString(2))
         assertEquals("remote-2", cursor.getString(3))
         cursor.close()
+
+        database.close()
+    }
+
+    private fun v6Schema() = createDatabaseAt(6) {
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `captures` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`ownerId` TEXT, " +
+                "`remoteId` TEXT, " +
+                "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                "`content` TEXT NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`category` TEXT, " +
+                "`reminderAt` INTEGER, " +
+                "`deletedAt` INTEGER, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_embeddings` (" +
+                "`captureId` INTEGER NOT NULL PRIMARY KEY, " +
+                "`ownerId` TEXT NOT NULL, " +
+                "`embedding` BLOB NOT NULL, " +
+                "`model` TEXT NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL(
+            "INSERT INTO `captures` (ownerId, remoteId, syncState, content, type, category, reminderAt, createdAt, updatedAt) " +
+                "VALUES ('uid-existing-user', 'remote-1', 'SYNCED', 'kept note', 'TEXT', 'WORK', 5000, 1000, 1000)"
+        )
+    }
+
+    @Test
+    fun migrate6To7_addsIntentAndFlagsKeepsRows() = runTest {
+        v6Schema().use { v6 ->
+            BlurtDatabase.MIGRATION_6_7.migrate(v6)
+            v6.version = 7
+        }
+
+        val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
+            .addMigrations(BlurtDatabase.MIGRATION_6_7)
+            .build()
+
+        // Existing rows survive with their analysis, defaulting to unset flags.
+        val repo = CaptureRepository(database.captureDao())
+        val all = repo.observeAll("uid-existing-user").first()
+        assertEquals(1, all.size)
+        val capture = all.single()
+        assertEquals("kept note", capture.content)
+        assertEquals(com.blurt.app.data.model.CaptureCategory.WORK, capture.category)
+        assertNull(capture.intent)
+        assertEquals(5000L, capture.reminderAt?.toEpochMilli())
+        assertFalse(capture.isImportant)
+        assertFalse(capture.isArchived)
+
+        // The new columns are queryable — flags can be written and read back.
+        val dao = database.captureDao()
+        dao.setImportant(capture.id, "uid-existing-user", true, 2000L)
+        dao.setArchived(capture.id, "uid-existing-user", true, 2001L)
+        val updated = repo.observeAll("uid-existing-user").first()
+        assertTrue(updated.isEmpty()) // archived rows leave the main list
+        val archived = repo.observeArchived("uid-existing-user").first()
+        assertEquals(1, archived.size)
+        assertTrue(archived.single().isImportant)
+        assertTrue(archived.single().isArchived)
 
         database.close()
     }

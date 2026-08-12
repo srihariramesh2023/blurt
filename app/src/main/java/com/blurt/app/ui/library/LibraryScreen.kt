@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,7 +37,9 @@ import com.blurt.app.ui.components.EmptyState
 import com.blurt.app.ui.theme.BlurtSpacing
 
 /**
- * Library: every capture, newest first, with AI-category filter chips.
+ * Library: every capture, newest first, browsable through automatically
+ * maintained collections — Reminders, Tasks, Ideas, Important, Archived —
+ * plus the AI-category chips for the live lists.
  */
 @Composable
 fun LibraryScreen(
@@ -48,6 +49,7 @@ fun LibraryScreen(
 ) {
     val captures by viewModel.captures.collectAsStateWithLifecycle()
     val allCaptures by viewModel.allCaptures.collectAsStateWithLifecycle()
+    val selectedCollection by viewModel.selectedCollection.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
 
     Column(
@@ -81,22 +83,30 @@ fun LibraryScreen(
         )
         Spacer(Modifier.height(BlurtSpacing.l))
 
-        CategoryFilterRow(
-            captures = allCaptures,
-            selected = selectedCategory,
-            onSelect = viewModel::selectCategory,
+        CollectionFilterRow(
+            selected = selectedCollection,
+            onSelect = viewModel::selectCollection,
         )
+        // Categories belong to the live lists — the archive is its own view.
+        if (selectedCollection != LibraryCollection.ARCHIVED) {
+            Spacer(Modifier.height(8.dp))
+            CategoryFilterRow(
+                captures = allCaptures,
+                selected = selectedCategory,
+                onSelect = viewModel::selectCategory,
+            )
+        }
         Spacer(Modifier.height(BlurtSpacing.l))
 
         if (captures.isEmpty()) {
             Spacer(Modifier.height(24.dp))
             EmptyState(
                 icon = BlurtIcons.BlurtMark,
-                title = if (allCaptures.isEmpty()) "No captures yet" else "Nothing in ${selectedCategory?.label.orEmpty()}",
+                title = emptyTitle(selectedCollection),
                 body = if (allCaptures.isEmpty()) {
                     "Your blurts — text, ideas and links — will live here."
                 } else {
-                    "Pick another category or clear the filter."
+                    "Pick another collection or clear the filters."
                 },
             )
             TextButton(onClick = onCaptureNew, modifier = Modifier.align(Alignment.CenterHorizontally)) {
@@ -115,10 +125,36 @@ fun LibraryScreen(
                         capture = capture,
                         onClick = { onOpenCapture(capture.id) },
                         onDelete = viewModel::delete,
+                        onArchive = viewModel::setArchived,
                         modifier = Modifier.animateItem(),
                     )
                 }
             }
+        }
+    }
+}
+
+private fun emptyTitle(collection: LibraryCollection): String = when (collection) {
+    LibraryCollection.ALL -> "No captures yet"
+    LibraryCollection.REMINDERS -> "No reminders"
+    LibraryCollection.TASKS -> "No tasks"
+    LibraryCollection.IDEAS -> "No ideas"
+    LibraryCollection.IMPORTANT -> "Nothing important yet"
+    LibraryCollection.ARCHIVED -> "Nothing archived"
+}
+
+/** The main browse collections — All, then the automatically kept ones. */
+@Composable
+private fun CollectionFilterRow(
+    selected: LibraryCollection,
+    onSelect: (LibraryCollection) -> Unit,
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(LibraryCollection.entries, key = { it.name }) { collection ->
+            FilterChip(
+                label = collection.label,
+                selected = selected == collection,
+            ) { onSelect(collection) }
         }
     }
 }
@@ -135,7 +171,7 @@ private fun CategoryFilterRow(
 
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            FilterChip(label = "All", selected = selected == null) { onSelect(null) }
+            FilterChip(label = "Category · All", selected = selected == null) { onSelect(null) }
         }
         items(present, key = { it.name }) { category ->
             FilterChip(label = category.label, selected = selected == category) {

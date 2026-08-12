@@ -14,13 +14,21 @@ import com.blurt.app.ui.home.HomeScreen
 import com.blurt.app.ui.library.LibraryScreen
 import com.blurt.app.ui.search.SearchScreen
 import com.blurt.app.ui.theme.ThemeMode
+import com.blurt.app.ui.voice.VoiceScreen
 
 object BlurtRoutes {
     const val HOME = "home"
     const val LIBRARY = "library"
     const val SEARCH = "search"
-    /** The composer has no type anymore — Blurt decides what a blurt is. */
-    const val CAPTURE = "capture"
+
+    /** Voice-first capture — the primary way in. */
+    const val VOICE = "voice"
+
+    /** The typed composer; optional pre-filled text (e.g. Edit after voice). */
+    const val CAPTURE = "capture?text={text}"
+    fun capture(text: String? = null) =
+        if (text.isNullOrBlank()) "capture" else "capture?text=${android.net.Uri.encode(text)}"
+
     const val DETAIL = "detail/{id}"
 
     fun detail(id: Long) = "detail/$id"
@@ -46,7 +54,8 @@ fun BlurtNavHost(
                 themeMode = themeMode,
                 onThemeChange = onThemeChange,
                 onSignOut = onSignOut,
-                onCapture = { navController.navigate(BlurtRoutes.CAPTURE) },
+                onVoice = { navController.navigate(BlurtRoutes.VOICE) },
+                onCapture = { navController.navigate(BlurtRoutes.capture()) },
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
                 onOpenLibrary = { navController.navigate(BlurtRoutes.LIBRARY) },
                 onSearch = { navController.navigate(BlurtRoutes.SEARCH) },
@@ -55,7 +64,7 @@ fun BlurtNavHost(
         composable(BlurtRoutes.LIBRARY) {
             LibraryScreen(
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
-                onCaptureNew = { navController.navigate(BlurtRoutes.CAPTURE) },
+                onCaptureNew = { navController.navigate(BlurtRoutes.VOICE) },
             )
         }
         composable(BlurtRoutes.SEARCH) {
@@ -63,7 +72,27 @@ fun BlurtNavHost(
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
             )
         }
-        composable(BlurtRoutes.CAPTURE) {
+        composable(BlurtRoutes.VOICE) {
+            VoiceScreen(
+                onBack = { navController.popBackStack() },
+                onEdit = { text ->
+                    navController.navigate(BlurtRoutes.capture(text)) {
+                        popUpTo(BlurtRoutes.VOICE) { inclusive = true }
+                    }
+                },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = BlurtRoutes.CAPTURE,
+            arguments = listOf(
+                navArgument("text") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             CaptureScreen(
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },

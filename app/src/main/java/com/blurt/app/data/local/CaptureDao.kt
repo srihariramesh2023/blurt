@@ -14,8 +14,14 @@ interface CaptureDao {
     // tombstones (rows deleted locally but not yet removed from the backend).
 
     // id DESC breaks same-millisecond createdAt ties so ordering is deterministic.
-    @Query("SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL ORDER BY createdAt DESC, id DESC")
+    // Archived blurts are hidden from the main lists (Home, Library, Search)
+    // — they stay browsable through the dedicated archived query.
+    @Query("SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL AND isArchived = 0 ORDER BY createdAt DESC, id DESC")
     fun observeForOwner(ownerId: String): Flow<List<CaptureEntity>>
+
+    /** Archived blurts only — browsed from Library → Archived. */
+    @Query("SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL AND isArchived = 1 ORDER BY createdAt DESC, id DESC")
+    fun observeArchived(ownerId: String): Flow<List<CaptureEntity>>
 
     @Query("SELECT * FROM captures WHERE id = :id AND ownerId = :ownerId AND deletedAt IS NULL")
     fun observeById(id: Long, ownerId: String): Flow<CaptureEntity?>
@@ -24,7 +30,7 @@ interface CaptureDao {
     suspend fun getById(id: Long, ownerId: String): CaptureEntity?
 
     @Query(
-        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL AND isArchived = 0 " +
             "AND content LIKE '%' || :query || '%' " +
             "ESCAPE '\\' COLLATE NOCASE ORDER BY createdAt DESC, id DESC"
     )
@@ -32,7 +38,7 @@ interface CaptureDao {
 
     /** One-shot keyword search — the fallback when semantic search is down. */
     @Query(
-        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL AND isArchived = 0 " +
             "AND content LIKE '%' || :query || '%' " +
             "ESCAPE '\\' COLLATE NOCASE ORDER BY createdAt DESC, id DESC"
     )
@@ -95,21 +101,36 @@ interface CaptureDao {
     // --- AI categorization ------------------------------------------------
 
     /**
-     * Captures the analyzer hasn't tagged yet, for lazy backfill. Links are
-     * classified by rule (a URL is a Link), never by AI, so they're skipped.
+     * Captures the analyzer hasn't read yet (no category or intent), for lazy
+     * backfill. Links are classified by rule (a URL is a Link), never by AI,
+     * so they're skipped.
      */
     @Query(
-        "SELECT * FROM captures WHERE ownerId = :ownerId AND category IS NULL " +
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND (category IS NULL OR intent IS NULL) " +
             "AND type != 'LINK' AND deletedAt IS NULL ORDER BY createdAt ASC"
     )
-    suspend fun getUncategorized(ownerId: String): List<CaptureEntity>
+    suspend fun getUnanalyzed(ownerId: String): List<CaptureEntity>
 
-    /** Assigns an AI category; the row re-syncs so it reaches other devices. */
+    /** Assigns the AI analysis (category + intent); the row re-syncs. */
     @Query(
-        "UPDATE captures SET category = :category, updatedAt = :updatedAt, " +
+        "UPDATE captures SET category = :category, intent = :intent, updatedAt = :updatedAt, " +
             "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
     )
-    suspend fun setCategory(id: Long, ownerId: String, category: String, updatedAt: Long)
+    suspend fun setAnalysis(id: Long, ownerId: String, category: String, intent: String?, updatedAt: Long)
+
+    /** Marks/unmarks a blurt as important; the row re-syncs. */
+    @Query(
+        "UPDATE captures SET isImportant = :important, updatedAt = :updatedAt, " +
+            "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
+    )
+    suspend fun setImportant(id: Long, ownerId: String, important: Boolean, updatedAt: Long)
+
+    /** Archives/unarchives a blurt; the row re-syncs. */
+    @Query(
+        "UPDATE captures SET isArchived = :archived, updatedAt = :updatedAt, " +
+            "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
+    )
+    suspend fun setArchived(id: Long, ownerId: String, archived: Boolean, updatedAt: Long)
 
     /** Future reminders of the user — used to reschedule after a reboot. */
     @Query(

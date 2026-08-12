@@ -174,6 +174,26 @@ user, live in the app database, and are dropped on sign-out. The key is
 embedded in the APK (it's a free-tier, rate-limited key) — restrict it to your
 app's package and SHA-1 in Google Cloud if you distribute widely.
 
+### 4a. Capture analysis — preferred provider (Groq) — optional
+
+Classification (intent + category + time extraction) runs on **Gemini** by
+default. To prefer **Groq** — a much larger free daily quota (~14,400 requests)
+and faster responses, which makes the voice flow feel snappier — add a free
+key from <https://console.groq.com> (no credit card) to your gitignored
+`local.properties`:
+
+```properties
+# Optional — preferred capture-analysis provider when set
+groq.apiKey=gsk_…
+# Optional — defaults to llama-3.3-70b-versatile
+groq.model=llama-3.3-70b-versatile
+```
+
+When a Groq key is present it becomes the primary analyzer and Gemini is the
+automatic fallback (a Groq outage or rate limit silently rolls to Gemini, and
+vice versa). Semantic-search embeddings always stay on Gemini — Groq has no
+embedding models, and embeddings are the cheap, low-quota part anyway.
+
 ### 5. AI capture — categories and reminders
 
 The manual **Text / Idea / Link selector is gone**. Saving a blurt is now a
@@ -183,12 +203,18 @@ single action: type anything and tap **Save Blurt**.
 
 1. **Link detection (rules, no AI)**: if the content is a URL, it is saved as
    a Link blurt (keeps the link icon in lists) and skips the AI entirely.
-2. **Classification (AI)**: everything else goes to Gemini
-   (`gemini-3.5-flash`, JSON mode) which picks a category from a **fixed
-   list** — Work, Personal, Health, Finance, Travel, Ideas, Learning, Home,
-   Fitness, Social, Shopping, Other. The list never grows: the AI only ever
-   chooses from it, so the Library can show one clean filter chip per
-   category (All / Work / Health / …).
+2. **Classification (AI)**: everything else is read by the AI, which picks
+   an **intent** (Note / Task / Idea / Reminder) and a category from a
+   **fixed list** — Work, Personal, Health, Finance, Travel, Ideas, Learning,
+   Home, Fitness, Social, Shopping, Other. Neither list ever grows: the AI
+   only ever chooses from them, so the Library can show one clean filter chip
+   per collection and category (All / Reminders / Tasks / Ideas / Important /
+   Archived, plus All / Work / Health / …).
+
+   The classifier prefers **Groq** (fast, and its free tier allows ~14k
+   requests/day) and falls back to **Gemini** when no Groq key is set or a
+   Groq call fails — see *§4a* below. Both providers receive the same prompt
+   and return the same JSON shape.
 3. **Time extraction (AI, same call)**: if the blurt mentions a time ("yoga
    class tomorrow at 6pm"), Gemini resolves it to an absolute instant in the
    device's timezone.

@@ -6,6 +6,7 @@ import com.blurt.app.data.local.SyncState
 import com.blurt.app.data.local.toDomain
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureCategory
+import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.util.escapeLikePattern
 import java.util.UUID
@@ -31,6 +32,10 @@ class CaptureRepository(
     fun observeAll(ownerId: String): Flow<List<Capture>> =
         dao.observeForOwner(ownerId).map { list -> list.map(CaptureEntity::toDomain) }
 
+    /** Archived blurts only — browsed from Library → Archived. */
+    fun observeArchived(ownerId: String): Flow<List<Capture>> =
+        dao.observeArchived(ownerId).map { list -> list.map(CaptureEntity::toDomain) }
+
     fun observeById(id: Long, ownerId: String): Flow<Capture?> =
         dao.observeById(id, ownerId).map { it?.toDomain() }
 
@@ -46,7 +51,9 @@ class CaptureRepository(
         type: CaptureType,
         content: String,
         category: CaptureCategory? = null,
+        intent: CaptureIntent? = null,
         reminderAt: Long? = null,
+        isImportant: Boolean = false,
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
@@ -57,7 +64,9 @@ class CaptureRepository(
                 content = content.trim(),
                 type = type,
                 category = category?.name,
+                intent = intent?.name,
                 reminderAt = reminderAt,
+                isImportant = isImportant,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -88,13 +97,23 @@ class CaptureRepository(
         dao.claimUnowned(ownerId)
     }
 
-    /** Captures the AI hasn't tagged yet — links are classified by rule, never by AI. */
-    suspend fun getUncategorized(ownerId: String): List<Capture> =
-        dao.getUncategorized(ownerId).map(CaptureEntity::toDomain)
+    /** Captures the analyzer hasn't read yet — links are classified by rule, never by AI. */
+    suspend fun getUnanalyzed(ownerId: String): List<Capture> =
+        dao.getUnanalyzed(ownerId).map(CaptureEntity::toDomain)
 
-    /** Assigns an AI category and re-queues the row for sync. */
-    suspend fun setCategory(id: Long, ownerId: String, category: CaptureCategory) {
-        dao.setCategory(id, ownerId, category.name, System.currentTimeMillis())
+    /** Assigns the AI analysis (category + intent) and re-queues the row for sync. */
+    suspend fun setAnalysis(id: Long, ownerId: String, category: CaptureCategory, intent: CaptureIntent?) {
+        dao.setAnalysis(id, ownerId, category.name, intent?.name, System.currentTimeMillis())
+    }
+
+    /** Marks/unmarks a blurt as important and re-queues the row for sync. */
+    suspend fun setImportant(id: Long, ownerId: String, important: Boolean) {
+        dao.setImportant(id, ownerId, important, System.currentTimeMillis())
+    }
+
+    /** Archives/unarchives a blurt and re-queues the row for sync. */
+    suspend fun setArchived(id: Long, ownerId: String, archived: Boolean) {
+        dao.setArchived(id, ownerId, archived, System.currentTimeMillis())
     }
 
     /** Future reminders of the user — the boot receiver reschedules these. */

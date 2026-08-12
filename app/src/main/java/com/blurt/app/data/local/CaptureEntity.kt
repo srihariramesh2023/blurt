@@ -5,6 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureCategory
+import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
 import java.time.Instant
 
@@ -36,8 +37,17 @@ data class CaptureEntity(
      * enum name; null until the analyzer has classified this blurt.
      */
     val category: String? = null,
+    /**
+     * AI-assigned intent (note/task/idea/reminder) from the fixed
+     * CaptureIntent list, stored as the enum name; null until classified.
+     */
+    val intent: String? = null,
     /** When a priority Blurt notification was scheduled; null otherwise. */
     val reminderAt: Long? = null,
+    /** User/AI-marked important blurt — gold star in the lists. */
+    val isImportant: Boolean = false,
+    /** Hidden from the main lists; browsable in Library → Archived. */
+    val isArchived: Boolean = false,
     /**
      * Set when the user deletes; the row is removed locally only after the
      * backend delete is confirmed, so deletes propagate across devices.
@@ -55,7 +65,11 @@ fun CaptureEntity.toDomain(): Capture = Capture(
     type = type,
     // null stays null (not yet classified); an unknown stored name degrades to OTHER.
     category = category?.let(CaptureCategory::fromName),
+    // null stays null; an unknown stored name is ignored (not classified).
+    intent = CaptureIntent.fromName(intent),
     reminderAt = reminderAt?.let(Instant::ofEpochMilli),
+    isImportant = isImportant,
+    isArchived = isArchived,
     createdAt = Instant.ofEpochMilli(createdAt),
     updatedAt = Instant.ofEpochMilli(updatedAt),
 )
@@ -67,7 +81,10 @@ fun Capture.toEntity(): CaptureEntity = CaptureEntity(
     content = content,
     type = type,
     category = category?.name,
+    intent = intent?.name,
     reminderAt = reminderAt?.toEpochMilli(),
+    isImportant = isImportant,
+    isArchived = isArchived,
     createdAt = createdAt.toEpochMilli(),
     updatedAt = updatedAt.toEpochMilli(),
 )

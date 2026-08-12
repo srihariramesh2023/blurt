@@ -81,6 +81,14 @@ class SearchViewModel(
         }
     }
 
+    /** Moves a blurt to Library → Archived, out of the main lists. */
+    fun archive(id: Long) {
+        viewModelScope.launch {
+            val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            repository.setArchived(id, uid, true)
+        }
+    }
+
     companion object {
         private const val SEARCH_TIMEOUT_MS = 8_000L
 

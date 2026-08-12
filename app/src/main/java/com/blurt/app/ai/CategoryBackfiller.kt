@@ -34,18 +34,26 @@ class CategoryBackfiller(
 
     private suspend fun backfill(uid: String) {
         val analyzer = analyzer ?: return
-        val uncategorized = repository.getUncategorized(uid)
-        uncategorized.forEach { capture ->
+        val unanalyzed = repository.getUnanalyzed(uid)
+        android.util.Log.d(TAG, "backfill: ${unanalyzed.size} unanalyzed blurts")
+        unanalyzed.forEach { capture ->
             delay(DELAY_BETWEEN_CALLS_MS)
             val analysis = runCatching {
                 analyzer.analyze(capture.content, System.currentTimeMillis())
             }.getOrNull()
-            val category = analysis?.category ?: return@forEach
-            repository.setCategory(capture.id, uid, category)
+            if (analysis == null) {
+                android.util.Log.w(TAG, "backfill: analyzer returned null for id=${capture.id}")
+                return@forEach
+            }
+            android.util.Log.d(TAG, "backfill: id=${capture.id} -> ${analysis.intent}/${analysis.category}")
+            repository.setAnalysis(capture.id, uid, analysis.category, analysis.intent)
         }
+        android.util.Log.d(TAG, "backfill: done")
     }
 
     private companion object {
         const val DELAY_BETWEEN_CALLS_MS = 2_000L
+        const val TAG = "BlurtBackfill"
     }
+
 }

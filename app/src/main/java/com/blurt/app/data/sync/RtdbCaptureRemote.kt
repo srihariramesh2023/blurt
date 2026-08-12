@@ -36,7 +36,10 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                 "content" to capture.content,
                 "type" to capture.type.name,
                 "category" to capture.category,
+                "intent" to capture.intent,
                 "reminderAt" to capture.reminderAt,
+                "isImportant" to capture.isImportant,
+                "isArchived" to capture.isArchived,
                 "createdAt" to capture.createdAt,
                 "updatedAt" to capture.updatedAt,
                 "deleted" to false,
@@ -63,8 +66,11 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                         type = runCatching { CaptureType.valueOf(typeName) }
                             .getOrDefault(CaptureType.TEXT),
                         category = data["category"] as? String,
+                        intent = data["intent"] as? String,
                         reminderAt = (data["reminderAt"] as? Long)
                             ?: (data["reminderAt"] as? Number)?.toLong(),
+                        isImportant = (data["isImportant"] as? Boolean) ?: false,
+                        isArchived = (data["isArchived"] as? Boolean) ?: false,
                         createdAt = (data["createdAt"] as? Long) ?: 0L,
                         updatedAt = (data["updatedAt"] as? Long) ?: 0L,
                         deleted = (data["deleted"] as? Boolean) ?: false,

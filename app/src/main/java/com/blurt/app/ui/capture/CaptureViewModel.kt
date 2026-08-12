@@ -1,16 +1,18 @@
 package com.blurt.app.ui.capture
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.blurt.app.BlurtApp
+import com.blurt.app.ai.CaptureAnalysis
 import com.blurt.app.ai.CaptureAnalyzer
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
-import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.notifications.ReminderScheduler
 import com.blurt.app.util.isHttpUrl
@@ -37,9 +39,10 @@ class CaptureViewModel(
     private val analyzer: CaptureAnalyzer?,
     private val reminderScheduler: ReminderScheduler?,
     private val authState: StateFlow<AuthState>,
+    initialText: String?,
 ) : ViewModel() {
 
-    private val _content = MutableStateFlow("")
+    private val _content = MutableStateFlow(initialText ?: "")
     val content: StateFlow<String> = _content.asStateFlow()
 
     /** True while the AI reads the blurt (brief — the save button shows it). */
@@ -61,8 +64,8 @@ class CaptureViewModel(
     private val _saved = MutableStateFlow<Long?>(null)
     val saved: StateFlow<Long?> = _saved.asStateFlow()
 
-    /** Category + time waiting on the user's decision. */
-    data class PendingReminder(val category: CaptureCategory, val at: Long)
+    /** The full analysis + time waiting on the user's decision. */
+    data class PendingReminder(val analysis: CaptureAnalysis, val at: Long)
 
     fun onContentChange(text: String) {
         _content.value = text
@@ -86,7 +89,7 @@ class CaptureViewModel(
         // Links are classified by rule: a URL is a Link blurt, no AI involved.
         if (content.isHttpUrl()) {
             viewModelScope.launch {
-                saveCapture(uid, content, CaptureType.LINK, category = null, reminderAt = null)
+                saveCapture(uid, content, CaptureType.LINK, null, null, null, false)
             }
             return
         }
@@ -99,14 +102,14 @@ class CaptureViewModel(
             _analyzing.value = false
             when {
                 // Offline / no key / analyzer failure → save as-is, no reminder.
-                analysis == null -> saveCapture(uid, content, CaptureType.TEXT, null, null)
+                analysis == null -> saveCapture(uid, content, CaptureType.TEXT, null, null, null, false)
 
                 // A concrete future time → ask before saving.
                 analysis.reminderAt != null && analysis.reminderAt > System.currentTimeMillis() ->
-                    _pendingReminder.value = PendingReminder(analysis.category, analysis.reminderAt)
+                    _pendingReminder.value = PendingReminder(analysis, analysis.reminderAt)
 
-                // Categorized but no (or past) time → save immediately.
-                else -> saveCapture(uid, content, CaptureType.TEXT, analysis.category, null)
+                // Understood but no (or past) time → save immediately.
+                else -> saveCapture(uid, content, CaptureType.TEXT, analysis.category, analysis.intent, null, analysis.important)
             }
         }
     }
@@ -119,7 +122,15 @@ class CaptureViewModel(
         val content = _content.value.trim()
         viewModelScope.launch {
             val id = runCatching {
-                repository.create(uid, CaptureType.TEXT, content, pending.category, pending.at)
+                repository.create(
+                    ownerId = uid,
+                    type = CaptureType.TEXT,
+                    content = content,
+                    category = pending.analysis.category,
+                    intent = pending.analysis.intent,
+                    reminderAt = pending.at,
+                    isImportant = pending.analysis.important,
+                )
             }.getOrElse {
                 _error.value = "Couldn't save. Try again."
                 return@launch
@@ -136,7 +147,7 @@ class CaptureViewModel(
         val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return
         val content = _content.value.trim()
         viewModelScope.launch {
-            saveCapture(uid, content, CaptureType.TEXT, pending.category, null)
+            saveCapture(uid, content, CaptureType.TEXT, pending.analysis.category, pending.analysis.intent, null, pending.analysis.important)
             if (notificationsBlocked) {
                 _notice.value = "Notifications are off — saved without a reminder."
             }
@@ -151,14 +162,17 @@ class CaptureViewModel(
         uid: String,
         content: String,
         type: CaptureType,
-        category: CaptureCategory?,
+        category: com.blurt.app.data.model.CaptureCategory?,
+        intent: com.blurt.app.data.model.CaptureIntent?,
         reminderAt: Long?,
+        important: Boolean,
     ) {
-        val id = runCatching { repository.create(uid, type, content, category, reminderAt) }
-            .getOrElse {
-                _error.value = "Couldn't save. Try again."
-                return
-            }
+        val id = runCatching {
+            repository.create(uid, type, content, category, intent, reminderAt, important)
+        }.getOrElse {
+            _error.value = "Couldn't save. Try again."
+            return
+        }
         _saved.value = id
     }
 
@@ -166,11 +180,13 @@ class CaptureViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as BlurtApp
+                val handle = createSavedStateHandle()
                 CaptureViewModel(
                     repository = app.container.captureRepository,
                     analyzer = app.container.captureAnalyzer,
                     reminderScheduler = app.container.reminderScheduler,
                     authState = app.container.authRepository.authState,
+                    initialText = handle.get<String>("text"),
                 )
             }
         }

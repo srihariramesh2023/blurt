@@ -8,8 +8,13 @@ import java.time.Instant
  * [content] holds the text (for TEXT/IDEA) or the URL (for LINK).
  * [category] is the AI-assigned topic from the fixed [CaptureCategory] list
  * (null until the analyzer has run on it — e.g. saved offline).
+ * [intent] is what the user meant — note, task, idea, reminder — from the
+ * fixed [CaptureIntent] list (null until classified).
  * [reminderAt] is when a priority Blurt notification was scheduled for, or
  * null when no time was detected or the user declined.
+ * [isImportant] marks blurts the user (or the AI, from phrasing like "don't
+ * forget") called out as important; [isArchived] hides a blurt from the main
+ * lists while keeping it browsable in Library → Archived.
  */
 data class Capture(
     val id: Long,
@@ -20,7 +25,10 @@ data class Capture(
     val content: String,
     val type: CaptureType,
     val category: CaptureCategory? = null,
+    val intent: CaptureIntent? = null,
     val reminderAt: Instant? = null,
+    val isImportant: Boolean = false,
+    val isArchived: Boolean = false,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

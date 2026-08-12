@@ -83,6 +83,76 @@ object BlurtIcons {
         )
     }
 
+    /** Microphone — the heart of V2. */
+    val Mic: ImageVector by lazy {
+        icon(
+            name = "Mic",
+            pathData = "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" +
+                "M17.91 11c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85" +
+                "-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43" +
+                "5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z",
+        )
+    }
+
+    /** Filled star — the important marker. */
+    val Star: ImageVector by lazy {
+        icon(
+            name = "Star",
+            pathData = "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z",
+        )
+    }
+
+    /** Outline star — "not important yet". */
+    val StarOutline: ImageVector by lazy {
+        icon(
+            name = "StarOutline",
+            pathData = "M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24z" +
+                "M12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z",
+        )
+    }
+
+    /** Archive box — move a blurt out of the way. */
+    val Archive: ImageVector by lazy {
+        icon(
+            name = "Archive",
+            pathData = "M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z",
+        )
+    }
+
+    /** Bell — a reminder is scheduled on this blurt. */
+    val Bell: ImageVector by lazy {
+        icon(
+            name = "Bell",
+            pathData = "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
+        )
+    }
+
+    /** Keyboard — the quiet typed-input fallback. */
+    val Keyboard: ImageVector by lazy {
+        icon(
+            name = "Keyboard",
+            pathData = "M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2z" +
+                "M11 8h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2z" +
+                "M16 17H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z",
+        )
+    }
+
+    /** Square stop — end a recording. */
+    val Stop: ImageVector by lazy {
+        icon(
+            name = "Stop",
+            pathData = "M6 6h12v12H6z",
+        )
+    }
+
+    /** Check — save confirmation. */
+    val Check: ImageVector by lazy {
+        icon(
+            name = "Check",
+            pathData = "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
+        )
+    }
+
     private fun icon(name: String, pathData: String): ImageVector =
         ImageVector.Builder(
             name = name,

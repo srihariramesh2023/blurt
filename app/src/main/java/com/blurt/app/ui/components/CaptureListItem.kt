@@ -42,14 +42,16 @@ import com.blurt.app.util.urlDomain
 
 /**
  * A single capture row used across Home, Library and Search: a muted type
- * tile, the preview and timestamp (typography carries the hierarchy), and a
- * quiet overflow menu for deleting.
+ * tile, the preview and timestamp (typography carries the hierarchy), quiet
+ * gold markers for important blurts and scheduled reminders, and an overflow
+ * menu for archiving and deleting.
  */
 @Composable
 fun CaptureListItem(
     capture: Capture,
     onClick: () -> Unit,
     onDelete: (Long) -> Unit,
+    onArchive: ((Long, Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -94,13 +96,31 @@ fun CaptureListItem(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (capture.isImportant) {
+                        Spacer(Modifier.width(5.dp))
+                        Icon(
+                            imageVector = BlurtIcons.Star,
+                            contentDescription = "Important",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                    if (capture.reminderAt != null && capture.reminderAt.toEpochMilli() > System.currentTimeMillis()) {
+                        Spacer(Modifier.width(5.dp))
+                        Icon(
+                            imageVector = BlurtIcons.Bell,
+                            contentDescription = "Reminder set",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
                     capture.category?.let { category ->
                         Spacer(Modifier.width(6.dp))
                         CategoryPill(label = category.label)
                     }
                 }
             }
-            OverflowMenu(capture = capture, onDelete = onDelete)
+            OverflowMenu(capture = capture, onDelete = onDelete, onArchive = onArchive)
         }
     }
 }
@@ -125,6 +145,7 @@ private fun CategoryPill(label: String) {
 private fun OverflowMenu(
     capture: Capture,
     onDelete: (Long) -> Unit,
+    onArchive: ((Long, Boolean) -> Unit)?,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -144,6 +165,22 @@ private fun OverflowMenu(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(BlurtSpacing.m),
         ) {
+            onArchive?.let { archive ->
+                DropdownMenuItem(
+                    leadingIcon = {
+                        Icon(
+                            imageVector = BlurtIcons.Archive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    text = { Text(if (capture.isArchived) "Unarchive" else "Archive") },
+                    onClick = {
+                        menuOpen = false
+                        archive(capture.id, !capture.isArchived)
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                 onClick = {

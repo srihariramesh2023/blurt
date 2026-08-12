@@ -87,6 +87,7 @@ fun SearchScreen(
                         capture = capture,
                         onClick = { onOpenCapture(capture.id) },
                         onDelete = viewModel::delete,
+                        onArchive = { id, _ -> viewModel.archive(id) },
                         modifier = Modifier.animateItem(),
                     )
                 }

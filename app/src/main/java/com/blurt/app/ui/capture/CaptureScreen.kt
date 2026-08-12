@@ -224,7 +224,7 @@ fun CaptureScreen(
                     color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
                     Text(
-                        text = pending.category.label,
+                        text = pending.analysis.category.label,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

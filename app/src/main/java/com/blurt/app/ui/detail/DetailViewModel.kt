@@ -54,6 +54,10 @@ class DetailViewModel(
     private val _deleted = MutableStateFlow(false)
     val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
 
+    /** Set to true once archived; the screen pops back to the lists. */
+    private val _archived = MutableStateFlow(false)
+    val archived: StateFlow<Boolean> = _archived.asStateFlow()
+
     fun startEditing() {
         val current = capture.value
         _editText.value = current?.content.orEmpty()
@@ -101,6 +105,28 @@ class DetailViewModel(
 
     fun onDeletedHandled() {
         _deleted.value = false
+    }
+
+    /** Star/unstar the blurt; the gold star travels with it across devices. */
+    fun toggleImportant() {
+        val current = capture.value ?: return
+        viewModelScope.launch {
+            val uid = currentUid() ?: return@launch
+            repository.setImportant(captureId, uid, !current.isImportant)
+        }
+    }
+
+    /** Move to Library → Archived and leave the screen. */
+    fun archive() {
+        viewModelScope.launch {
+            val uid = currentUid() ?: return@launch
+            repository.setArchived(captureId, uid, true)
+            _archived.value = true
+        }
+    }
+
+    fun onArchivedHandled() {
+        _archived.value = false
     }
 
     private fun currentUid(): String? = (authState.value as? AuthState.SignedIn)?.user?.uid

@@ -4,9 +4,20 @@
     <!-- Reminder notifications: runtime-granted on Android 13+, and the exact
          alarm permission is declared so reminders can fire on the dot where
          the OS allows it (the scheduler falls back gracefully elsewhere). -->
+    <!-- Voice capture: runtime-granted on first mic tap. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Android 11+ package visibility: lets the app see the system speech
+         recognizer (Google app) so the availability check works and voice
+         capture can start. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".BlurtApp"

@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.room.Room
 import com.blurt.app.ai.CategoryBackfiller
+import com.blurt.app.ai.CaptureAnalyzer
+import com.blurt.app.ai.FallbackCaptureAnalyzer
 import com.blurt.app.ai.GeminiCaptureAnalyzer
 import com.blurt.app.ai.GeminiEmbeddingProvider
+import com.blurt.app.ai.GroqCaptureAnalyzer
 import com.blurt.app.ai.SemanticSearchEngine
 import com.blurt.app.auth.AuthRepository
 import com.blurt.app.auth.FirebaseAuthRepository
@@ -52,6 +55,7 @@ class AppContainer(context: Context) {
             BlurtDatabase.MIGRATION_3_4,
             BlurtDatabase.MIGRATION_4_5,
             BlurtDatabase.MIGRATION_5_6,
+            BlurtDatabase.MIGRATION_6_7,
         )
         .build()
 
@@ -67,19 +71,39 @@ class AppContainer(context: Context) {
     val reminderScheduler = ReminderScheduler(context)
 
     /**
-     * Capture analysis (category + time extraction) is enabled only when a
-     * Gemini API key was supplied at build time. With no key it is null and
-     * saving falls back to the rule-based Link detection with no category —
-     * the app stays fully usable offline or unconfigured.
+     * Capture analysis (intent + category + time extraction). Groq is the
+     * preferred provider when a key was supplied at build time (bigger free
+     * daily quota, faster inference for the voice flow); Gemini is the
+     * fallback when Groq is missing or fails. With no key at all this is null
+     * and saving falls back to the rule-based Link detection with no
+     * classification — the app stays fully usable offline or unconfigured.
      */
-    val captureAnalyzer: GeminiCaptureAnalyzer? = if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-        GeminiCaptureAnalyzer(
-            apiKey = BuildConfig.GEMINI_API_KEY,
-            packageName = context.packageName,
-            certSha1 = signingCertSha1(context),
-        )
-    } else {
-        null
+    val captureAnalyzer: CaptureAnalyzer? = buildCaptureAnalyzer(context)
+
+    private fun buildCaptureAnalyzer(context: Context): CaptureAnalyzer? {
+        val gemini = if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
+            GeminiCaptureAnalyzer(
+                apiKey = BuildConfig.GEMINI_API_KEY,
+                packageName = context.packageName,
+                certSha1 = signingCertSha1(context),
+            )
+        } else {
+            null
+        }
+        val groq = if (BuildConfig.GROQ_API_KEY.isNotBlank()) {
+            GroqCaptureAnalyzer(
+                apiKey = BuildConfig.GROQ_API_KEY,
+                model = BuildConfig.GROQ_MODEL,
+            )
+        } else {
+            null
+        }
+        return when {
+            groq != null && gemini != null -> FallbackCaptureAnalyzer(groq, gemini)
+            groq != null -> groq
+            gemini != null -> gemini
+            else -> null
+        }
     }
 
     // Semantic search is enabled only when a Gemini API key was supplied at

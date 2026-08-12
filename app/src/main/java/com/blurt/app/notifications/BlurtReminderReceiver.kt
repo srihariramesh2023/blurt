@@ -47,7 +47,7 @@ class BlurtReminderReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Reminder")
+            .setContentTitle("You've got a Blurt")
             .setContentText(content)
             .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .setContentIntent(contentIntent)

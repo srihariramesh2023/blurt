@@ -11,8 +11,14 @@ data class RemoteCapture(
     val updatedAt: Long,
     /** AI-assigned topic (enum name); null until classified. */
     val category: String? = null,
+    /** AI-assigned intent (enum name); null until classified. */
+    val intent: String? = null,
     /** When a reminder notification was scheduled on some device; null otherwise. */
     val reminderAt: Long? = null,
+    /** User-marked important; the gold star travels across devices. */
+    val isImportant: Boolean = false,
+    /** Hidden from main lists on every device, browsable in Library → Archived. */
+    val isArchived: Boolean = false,
     /** Deletes are explicit tombstones so other devices can detect them. */
     val deleted: Boolean = false,
 )
