@@ -132,10 +132,25 @@ interface CaptureDao {
     )
     suspend fun setArchived(id: Long, ownerId: String, archived: Boolean, updatedAt: Long)
 
-    /** Future reminders of the user — used to reschedule after a reboot. */
+    /** Marks a blurt done (or reopens it with null); the row re-syncs. */
+    @Query(
+        "UPDATE captures SET completedAt = :completedAt, updatedAt = :updatedAt, " +
+            "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
+    )
+    suspend fun setCompletedAt(id: Long, ownerId: String, completedAt: Long?, updatedAt: Long)
+
+    /** Moves a reminder's firing time (snooze from the notification shade). */
+    @Query(
+        "UPDATE captures SET reminderAt = :reminderAt, updatedAt = :updatedAt, " +
+            "syncState = 'PENDING' WHERE id = :id AND ownerId = :ownerId"
+    )
+    suspend fun setReminderAt(id: Long, ownerId: String, reminderAt: Long, updatedAt: Long)
+
+    /** Future, not-yet-done reminders of the user — rescheduled after a reboot. */
     @Query(
         "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
-            "AND reminderAt IS NOT NULL AND reminderAt > :now ORDER BY reminderAt ASC"
+            "AND reminderAt IS NOT NULL AND reminderAt > :now AND completedAt IS NULL " +
+            "ORDER BY reminderAt ASC"
     )
     suspend fun getUpcomingReminders(ownerId: String, now: Long): List<CaptureEntity>
 }

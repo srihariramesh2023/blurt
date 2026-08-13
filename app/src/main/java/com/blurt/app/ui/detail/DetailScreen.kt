@@ -106,6 +106,21 @@ fun DetailScreen(
                     }
                 } else {
                     val currentCapture = capture ?: return@BlurtTopBar
+                    if (currentCapture.reminderAt != null) {
+                        val doneSource = rememberBlurtInteractionSource()
+                        IconButton(
+                            onClick = viewModel::toggleCompleted,
+                            interactionSource = doneSource,
+                            modifier = Modifier.blurtPressScale(doneSource),
+                        ) {
+                            Icon(
+                                imageVector = BlurtIcons.Check,
+                                contentDescription = if (currentCapture.completedAt != null) "Reopen" else "Mark done",
+                                tint = if (currentCapture.completedAt != null) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     val starSource = rememberBlurtInteractionSource()
                     IconButton(
                         onClick = viewModel::toggleImportant,
@@ -293,11 +308,24 @@ private fun DetailContent(
         }
         capture.reminderAt?.let { reminderAt ->
             Spacer(Modifier.height(10.dp))
-            Text(
-                text = "Reminder · ${TimeFormat.full(reminderAt.toEpochMilli())}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            if (capture.completedAt != null) {
+                Text(
+                    text = "Done · ${TimeFormat.full(capture.completedAt!!.toEpochMilli())}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "Reminder was · ${TimeFormat.full(reminderAt.toEpochMilli())}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = "Reminder · ${TimeFormat.full(reminderAt.toEpochMilli())}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
         Spacer(Modifier.height(24.dp))
 

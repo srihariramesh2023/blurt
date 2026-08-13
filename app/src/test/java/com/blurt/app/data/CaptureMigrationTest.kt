@@ -147,6 +147,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
+                BlurtDatabase.MIGRATION_7_8,
             )
             .build()
         val repository = CaptureRepository(database.captureDao())
@@ -197,6 +198,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
+                BlurtDatabase.MIGRATION_7_8,
             )
             .build()
 
@@ -255,6 +257,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
+                BlurtDatabase.MIGRATION_7_8,
             )
             .build()
 
@@ -313,7 +316,11 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_5_6, BlurtDatabase.MIGRATION_6_7)
+            .addMigrations(
+                BlurtDatabase.MIGRATION_5_6,
+                BlurtDatabase.MIGRATION_6_7,
+                BlurtDatabase.MIGRATION_7_8,
+            )
             .build()
 
         // Existing rows survive, uncategorized and without reminders — the
@@ -349,6 +356,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_4_5,
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
+                BlurtDatabase.MIGRATION_7_8,
             )
             .build()
 
@@ -423,7 +431,7 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_6_7)
+            .addMigrations(BlurtDatabase.MIGRATION_6_7, BlurtDatabase.MIGRATION_7_8)
             .build()
 
         // Existing rows survive with their analysis, defaulting to unset flags.
@@ -448,6 +456,76 @@ class CaptureMigrationTest {
         assertEquals(1, archived.size)
         assertTrue(archived.single().isImportant)
         assertTrue(archived.single().isArchived)
+
+        database.close()
+    }
+
+    private fun v7Schema() = createDatabaseAt(7) {
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `captures` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`ownerId` TEXT, " +
+                "`remoteId` TEXT, " +
+                "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                "`content` TEXT NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`category` TEXT, " +
+                "`intent` TEXT, " +
+                "`reminderAt` INTEGER, " +
+                "`isImportant` INTEGER NOT NULL DEFAULT 0, " +
+                "`isArchived` INTEGER NOT NULL DEFAULT 0, " +
+                "`deletedAt` INTEGER, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_embeddings` (" +
+                "`captureId` INTEGER NOT NULL PRIMARY KEY, " +
+                "`ownerId` TEXT NOT NULL, " +
+                "`embedding` BLOB NOT NULL, " +
+                "`model` TEXT NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL(
+            "INSERT INTO `captures` (ownerId, remoteId, syncState, content, type, category, intent, reminderAt, createdAt, updatedAt) " +
+                "VALUES ('uid-existing-user', 'remote-1', 'SYNCED', 'reminder note', 'TEXT', 'HEALTH', 'REMINDER', 5000, 1000, 1000)"
+        )
+    }
+
+    @Test
+    fun migrate7To8_addsCompletedAtKeepsRows() = runTest {
+        v7Schema().use { v7 ->
+            BlurtDatabase.MIGRATION_7_8.migrate(v7)
+            v7.version = 8
+        }
+
+        val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
+            .addMigrations(BlurtDatabase.MIGRATION_7_8)
+            .build()
+
+        // Existing rows survive, not done, with all v7 analysis intact.
+        val repo = CaptureRepository(database.captureDao())
+        val all = repo.observeAll("uid-existing-user").first()
+        assertEquals(1, all.size)
+        val capture = all.single()
+        assertEquals("reminder note", capture.content)
+        assertEquals(com.blurt.app.data.model.CaptureCategory.HEALTH, capture.category)
+        assertEquals(com.blurt.app.data.model.CaptureIntent.REMINDER, capture.intent)
+        assertEquals(5000L, capture.reminderAt?.toEpochMilli())
+        assertNull(capture.completedAt)
+
+        // Done can be written, read back, and reverted; upcoming-reminders
+        // excludes it while done.
+        val dao = database.captureDao()
+        dao.setCompletedAt(capture.id, "uid-existing-user", 9000L, 2000L)
+        val done = repo.observeById(capture.id, "uid-existing-user").first()!!
+        assertEquals(9000L, done.completedAt?.toEpochMilli())
+        assertTrue(dao.getUpcomingReminders("uid-existing-user", 0L).isEmpty())
+        dao.setCompletedAt(capture.id, "uid-existing-user", null, 2001L)
+        assertNull(repo.observeById(capture.id, "uid-existing-user").first()!!.completedAt)
+        assertEquals(1, dao.getUpcomingReminders("uid-existing-user", 0L).size)
 
         database.close()
     }

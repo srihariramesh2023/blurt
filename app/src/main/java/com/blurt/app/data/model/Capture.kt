@@ -14,7 +14,9 @@ import java.time.Instant
  * null when no time was detected or the user declined.
  * [isImportant] marks blurts the user (or the AI, from phrasing like "don't
  * forget") called out as important; [isArchived] hides a blurt from the main
- * lists while keeping it browsable in Library → Archived.
+ * lists while keeping it browsable in Library → Archived; [completedAt] is
+ * when a reminder blurt was marked done (cancels its alarm and removes it
+ * from the Reminders collection).
  */
 data class Capture(
     val id: Long,
@@ -29,6 +31,7 @@ data class Capture(
     val reminderAt: Instant? = null,
     val isImportant: Boolean = false,
     val isArchived: Boolean = false,
+    val completedAt: Instant? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

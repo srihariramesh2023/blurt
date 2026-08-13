@@ -61,6 +61,7 @@ class AppContainer(context: Context) {
             BlurtDatabase.MIGRATION_4_5,
             BlurtDatabase.MIGRATION_5_6,
             BlurtDatabase.MIGRATION_6_7,
+            BlurtDatabase.MIGRATION_7_8,
         )
         .build()
 

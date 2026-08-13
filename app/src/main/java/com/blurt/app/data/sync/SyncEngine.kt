@@ -97,6 +97,7 @@ class SyncEngine(
                     reminderAt = capture.reminderAt,
                     isImportant = capture.isImportant,
                     isArchived = capture.isArchived,
+                    completedAt = capture.completedAt,
                     createdAt = capture.createdAt,
                     updatedAt = capture.updatedAt,
                 ),
@@ -149,6 +150,7 @@ class SyncEngine(
                         reminderAt = remoteCapture.reminderAt,
                         isImportant = remoteCapture.isImportant,
                         isArchived = remoteCapture.isArchived,
+                        completedAt = remoteCapture.completedAt,
                         updatedAt = remoteCapture.updatedAt,
                         syncState = SyncState.SYNCED,
                     )
@@ -174,6 +176,7 @@ private fun RemoteCapture.toEntity(ownerId: String): CaptureEntity = CaptureEnti
     reminderAt = reminderAt,
     isImportant = isImportant,
     isArchived = isArchived,
+    completedAt = completedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

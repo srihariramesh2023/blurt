@@ -40,6 +40,7 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                 "reminderAt" to capture.reminderAt,
                 "isImportant" to capture.isImportant,
                 "isArchived" to capture.isArchived,
+                "completedAt" to capture.completedAt,
                 "createdAt" to capture.createdAt,
                 "updatedAt" to capture.updatedAt,
                 "deleted" to false,
@@ -71,6 +72,8 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                             ?: (data["reminderAt"] as? Number)?.toLong(),
                         isImportant = (data["isImportant"] as? Boolean) ?: false,
                         isArchived = (data["isArchived"] as? Boolean) ?: false,
+                        completedAt = (data["completedAt"] as? Long)
+                            ?: (data["completedAt"] as? Number)?.toLong(),
                         createdAt = (data["createdAt"] as? Long) ?: 0L,
                         updatedAt = (data["updatedAt"] as? Long) ?: 0L,
                         deleted = (data["deleted"] as? Boolean) ?: false,

@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [CaptureEntity::class, EmbeddingEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @TypeConverters(
@@ -126,6 +126,17 @@ abstract class BlurtDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE captures ADD COLUMN intent TEXT")
                 db.execSQL("ALTER TABLE captures ADD COLUMN isImportant INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE captures ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v7 → v8: `completedAt` — marking a reminder blurt done (from the
+         * notification shade or the detail screen). Existing rows default to
+         * NULL (not done); done blurts keep their data but stop re-firing.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE captures ADD COLUMN completedAt INTEGER")
             }
         }
     }

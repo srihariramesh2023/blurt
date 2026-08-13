@@ -116,6 +116,17 @@ class DetailViewModel(
         }
     }
 
+    /** Mark done / reopen — cancels the alarm on done, never re-fires. */
+    fun toggleCompleted() {
+        val current = capture.value ?: return
+        val nowDone = current.completedAt == null
+        viewModelScope.launch {
+            val uid = currentUid() ?: return@launch
+            repository.setCompleted(captureId, uid, nowDone)
+            if (nowDone) reminderScheduler?.cancel(captureId)
+        }
+    }
+
     /** Move to Library → Archived and leave the screen. */
     fun archive() {
         viewModelScope.launch {

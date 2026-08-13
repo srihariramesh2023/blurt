@@ -49,6 +49,12 @@ data class CaptureEntity(
     /** Hidden from the main lists; browsable in Library → Archived. */
     val isArchived: Boolean = false,
     /**
+     * Set when the user marks a reminder blurt done (from the notification
+     * shade or the detail screen). Cancels the alarm and hides it from the
+     * Reminders collection; null until then.
+     */
+    val completedAt: Long? = null,
+    /**
      * Set when the user deletes; the row is removed locally only after the
      * backend delete is confirmed, so deletes propagate across devices.
      */
@@ -70,6 +76,7 @@ fun CaptureEntity.toDomain(): Capture = Capture(
     reminderAt = reminderAt?.let(Instant::ofEpochMilli),
     isImportant = isImportant,
     isArchived = isArchived,
+    completedAt = completedAt?.let(Instant::ofEpochMilli),
     createdAt = Instant.ofEpochMilli(createdAt),
     updatedAt = Instant.ofEpochMilli(updatedAt),
 )
@@ -85,6 +92,7 @@ fun Capture.toEntity(): CaptureEntity = CaptureEntity(
     reminderAt = reminderAt?.toEpochMilli(),
     isImportant = isImportant,
     isArchived = isArchived,
+    completedAt = completedAt?.toEpochMilli(),
     createdAt = createdAt.toEpochMilli(),
     updatedAt = updatedAt.toEpochMilli(),
 )

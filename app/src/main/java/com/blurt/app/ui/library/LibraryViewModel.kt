@@ -77,8 +77,8 @@ class LibraryViewModel(
             .filter { capture ->
                 when (collection) {
                     LibraryCollection.ALL -> true
-                    LibraryCollection.REMINDERS ->
-                        capture.intent == CaptureIntent.REMINDER || capture.reminderAt != null
+                    LibraryCollection.REMINDERS -> capture.completedAt == null &&
+                        (capture.intent == CaptureIntent.REMINDER || capture.reminderAt != null)
                     LibraryCollection.TASKS -> capture.intent == CaptureIntent.TASK
                     LibraryCollection.IDEAS ->
                         capture.intent == CaptureIntent.IDEA || capture.category == CaptureCategory.IDEAS

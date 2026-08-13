@@ -116,6 +116,17 @@ class CaptureRepository(
         dao.setArchived(id, ownerId, archived, System.currentTimeMillis())
     }
 
+    /** Marks a blurt done (or reopens it) and re-queues the row for sync. */
+    suspend fun setCompleted(id: Long, ownerId: String, completed: Boolean) {
+        val at = if (completed) System.currentTimeMillis() else null
+        dao.setCompletedAt(id, ownerId, at, System.currentTimeMillis())
+    }
+
+    /** Moves a reminder's firing time (snooze) and re-queues the row for sync. */
+    suspend fun rescheduleReminder(id: Long, ownerId: String, reminderAt: Long) {
+        dao.setReminderAt(id, ownerId, reminderAt, System.currentTimeMillis())
+    }
+
     /** Future reminders of the user — the boot receiver reschedules these. */
     suspend fun getUpcomingReminders(ownerId: String): List<Capture> =
         dao.getUpcomingReminders(ownerId, System.currentTimeMillis()).map(CaptureEntity::toDomain)

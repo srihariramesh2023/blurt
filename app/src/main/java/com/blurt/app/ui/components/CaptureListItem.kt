@@ -105,7 +105,9 @@ fun CaptureListItem(
                             modifier = Modifier.size(13.dp),
                         )
                     }
-                    if (capture.reminderAt != null && capture.reminderAt.toEpochMilli() > System.currentTimeMillis()) {
+                    if (capture.reminderAt != null && capture.completedAt == null &&
+                        capture.reminderAt.toEpochMilli() > System.currentTimeMillis()
+                    ) {
                         Spacer(Modifier.width(5.dp))
                         Icon(
                             imageVector = BlurtIcons.Bell,

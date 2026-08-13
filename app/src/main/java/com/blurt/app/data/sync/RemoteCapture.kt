@@ -19,6 +19,8 @@ data class RemoteCapture(
     val isImportant: Boolean = false,
     /** Hidden from main lists on every device, browsable in Library → Archived. */
     val isArchived: Boolean = false,
+    /** When a reminder blurt was marked done (null = not done). */
+    val completedAt: Long? = null,
     /** Deletes are explicit tombstones so other devices can detect them. */
     val deleted: Boolean = false,
 )

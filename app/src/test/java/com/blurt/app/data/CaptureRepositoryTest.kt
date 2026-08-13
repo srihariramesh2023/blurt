@@ -34,6 +34,10 @@ class CaptureRepositoryTest {
     private val alice = "uid-alice"
     private val bob = "uid-bob"
 
+    /** A reminder time safely in the future, so it counts as "upcoming". */
+    private fun future(offsetMillis: Long = 60_000L): Long =
+        System.currentTimeMillis() + offsetMillis
+
     @Before
     fun setUp() {
         val context = RuntimeEnvironment.getApplication()
@@ -221,6 +225,53 @@ class CaptureRepositoryTest {
     }
 
     // --- search ---------------------------------------------------------------
+
+    // --- completed / reschedule ---------------------------------------------
+
+    @Test
+    fun setCompleted_marksDoneAndHidesFromUpcomingReminders() = runTest {
+        val id = repository.create(alice, CaptureType.TEXT, "water the plants", reminderAt = future())
+
+        repository.setCompleted(id, alice, completed = true)
+
+        val capture = repository.observeById(id, alice).first()!!
+        assertNotNull(capture.completedAt)
+        assertTrue(repository.getUpcomingReminders(alice).isEmpty())
+    }
+
+    @Test
+    fun reopen_clearsCompletedAt() = runTest {
+        val id = repository.create(alice, CaptureType.TEXT, "call mom", reminderAt = future())
+        repository.setCompleted(id, alice, completed = true)
+        assertNotNull(repository.observeById(id, alice).first()!!.completedAt)
+
+        repository.setCompleted(id, alice, completed = false)
+
+        assertNull(repository.observeById(id, alice).first()!!.completedAt)
+        assertEquals(1, repository.getUpcomingReminders(alice).size)
+    }
+
+    @Test
+    fun rescheduleReminder_movesTheFiringTime() = runTest {
+        val id = repository.create(alice, CaptureType.TEXT, "gym at 6", reminderAt = future())
+        val moved = future(120_000L)
+
+        repository.rescheduleReminder(id, alice, moved)
+
+        val capture = repository.observeById(id, alice).first()!!
+        assertEquals(moved, capture.reminderAt?.toEpochMilli())
+        // The rescheduled reminder is still upcoming.
+        assertEquals(listOf(id), repository.getUpcomingReminders(alice).map { it.id })
+    }
+
+    @Test
+    fun setCompleted_cannotTouchAnotherUsersCapture() = runTest {
+        val id = repository.create(alice, CaptureType.TEXT, "alice's reminder", reminderAt = future())
+
+        repository.setCompleted(id, bob, completed = true)
+
+        assertNull(repository.observeById(id, alice).first()!!.completedAt)
+    }
 
     @Test
     fun search_isCaseInsensitiveAndPartial() = runTest {
