@@ -5,10 +5,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.luminance
 
 /**
  * Both themes map the same semantic tokens onto Material3's slots, so
  * components written against colorScheme automatically re-skin correctly.
+ * The mappings follow iOS conventions: surfaceVariant carries elevated
+ * surfaces (sheets/menus), onSurfaceVariant is secondary label, tertiary is
+ * secondary label (section headers), and primary is the system-blue tint.
  */
 private val DarkScheme = darkColorScheme(
     primary = BlurtDark.Accent,
@@ -19,7 +23,7 @@ private val DarkScheme = darkColorScheme(
     onSecondary = BlurtDark.OnAccent,
     secondaryContainer = BlurtDark.AccentSoft,
     onSecondaryContainer = BlurtDark.Accent,
-    tertiary = BlurtDark.TextTertiary,
+    tertiary = BlurtDark.TextSecondary,
     onTertiary = BlurtDark.TextPrimary,
     background = BlurtDark.Background,
     onBackground = BlurtDark.TextPrimary,
@@ -27,10 +31,10 @@ private val DarkScheme = darkColorScheme(
     onSurface = BlurtDark.TextPrimary,
     surfaceVariant = BlurtDark.SurfaceElevated,
     onSurfaceVariant = BlurtDark.TextSecondary,
-    outline = BlurtDark.Border,
-    outlineVariant = BlurtDark.Border,
+    outline = BlurtDark.Hairline,
+    outlineVariant = BlurtDark.Hairline,
     error = BlurtDark.Error,
-    onError = BlurtDark.TextPrimary,
+    onError = Color.White,
     surfaceTint = BlurtDark.Accent,
 )
 
@@ -43,7 +47,7 @@ private val LightScheme = lightColorScheme(
     onSecondary = BlurtLight.OnAccent,
     secondaryContainer = BlurtLight.AccentSoft,
     onSecondaryContainer = BlurtLight.Accent,
-    tertiary = BlurtLight.TextTertiary,
+    tertiary = BlurtLight.TextSecondary,
     onTertiary = BlurtLight.TextPrimary,
     background = BlurtLight.Background,
     onBackground = BlurtLight.TextPrimary,
@@ -51,12 +55,22 @@ private val LightScheme = lightColorScheme(
     onSurface = BlurtLight.TextPrimary,
     surfaceVariant = BlurtLight.SurfaceElevated,
     onSurfaceVariant = BlurtLight.TextSecondary,
-    outline = BlurtLight.Border,
-    outlineVariant = BlurtLight.Border,
+    outline = BlurtLight.Hairline,
+    outlineVariant = BlurtLight.Hairline,
     error = BlurtLight.Error,
     onError = Color.White,
     surfaceTint = BlurtLight.Accent,
 )
+
+/**
+ * The iOS search-field fill — a quiet gray that reads as a recessed input
+ * against both page backgrounds. Read from the active theme's darkness so it
+ * stays correct even when the user overrides the system theme.
+ */
+@Composable
+fun fieldFill(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) BlurtDark.FieldFill
+    else BlurtLight.FieldFill
 
 @Composable
 fun BlurtTheme(

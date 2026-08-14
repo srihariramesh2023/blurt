@@ -47,6 +47,10 @@ class SearchViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    /** True when the latest search ran through semantic embeddings. */
+    private val _semanticUsed = MutableStateFlow(false)
+    val semanticUsed: StateFlow<Boolean> = _semanticUsed.asStateFlow()
+
     val results: StateFlow<List<Capture>> = combine(
         _query.debounce(250).distinctUntilChanged(),
         authState,
@@ -59,6 +63,7 @@ class SearchViewModel(
                     val semantic = semanticSearch?.let {
                         withTimeoutOrNull(SEARCH_TIMEOUT_MS) { it.search(query, uid) }
                     }
+                    _semanticUsed.value = semantic != null
                     emit(
                         if (semantic != null) semantic.map { it.toDomain() }
                         else repository.searchOnce(query.escapeLikePattern(), uid)

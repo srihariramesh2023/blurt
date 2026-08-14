@@ -34,6 +34,7 @@ class BlurtApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        com.blurt.app.ui.components.BlurtSound.init(this)
         android.util.Log.d(
             "BlurtAi",
             "captureAnalyzer=${container.captureAnalyzer?.javaClass?.simpleName} " +

@@ -79,7 +79,7 @@ fun LoginScreen(
             Spacer(Modifier.height(28.dp))
             Entrance(tick = entered, delayMs = 90) {
                 Text(
-                    text = "BLURT",
+                    text = "Blurt",
                     style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
@@ -88,7 +88,7 @@ fun LoginScreen(
             Entrance(tick = entered, delayMs = 180) {
                 Text(
                     text = "A quiet home for the things on your mind.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
@@ -126,9 +126,9 @@ fun LoginScreen(
 }
 
 /**
- * Google's primary sign-in button, theme-aware per the reference: a black
- * pill with white label on the light theme, a white pill with dark label on
- * the dark theme. The G mark stays full-color in both.
+ * Google's primary sign-in button, per the locked standard: a white capsule
+ * pill (54pt) with dark label in both themes, hairline-edged on light so it
+ * still reads against the white canvas. The G mark stays full-color.
  */
 @Composable
 private fun ContinueWithGoogleButton(
@@ -137,20 +137,23 @@ private fun ContinueWithGoogleButton(
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = rememberBlurtInteractionSource()
+    // The spec's white pill — with a hairline edge in light mode so it
+    // still reads against the white canvas.
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val pillColor = if (isDark) Color.White else Color.Black
-    val labelColor = if (isDark) Color(0xFF1F1F1F) else Color.White
     Surface(
         onClick = onClick,
         enabled = !isSigningIn,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(16.dp),
-        color = pillColor,
+        shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.pill),
+        color = Color.White,
+        border = if (isDark) null
+        else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(54.dp)
             .blurtPressScale(interactionSource),
     ) {
+        val labelColor = Color(0xFF1F1F1F)
         Box(contentAlignment = Alignment.Center) {
             if (isSigningIn) {
                 CircularProgressIndicator(

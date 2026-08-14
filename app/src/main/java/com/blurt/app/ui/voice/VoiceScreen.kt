@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +64,7 @@ import com.blurt.app.ai.CaptureAnalysis
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
+import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.util.TimeFormat
 import kotlin.math.sin
@@ -98,6 +100,33 @@ fun VoiceScreen(
     val editRequested by viewModel.editRequested.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val haptics = rememberBlurtHaptics()
+
+    // Multimodal feedback: visual + haptic + sound at the same instant.
+    // Mic press → tick + start sound; stop → double tick + stop sound.
+    val onMicTapped = {
+        haptics.tick()
+        com.blurt.app.ui.components.BlurtSound.playStart()
+        viewModel.onMicTapped()
+    }
+    val onStop = {
+        haptics.doubleTick()
+        com.blurt.app.ui.components.BlurtSound.playStop()
+        viewModel.stop()
+    }
+
+    // Analysis landing / confirm sheet → medium pulse.
+    LaunchedEffect(phase) {
+        if (phase == VoicePhase.CONFIRM) haptics.pulse()
+    }
+
+    // Errors buzz + tone, whatever the phase.
+    LaunchedEffect(error) {
+        if (error != null) {
+            haptics.error()
+            com.blurt.app.ui.components.BlurtSound.playError()
+        }
+    }
 
     // The mic permission gate — the launcher must be registered before any
     // state can request it.
@@ -123,6 +152,8 @@ fun VoiceScreen(
 
     LaunchedEffect(saved) {
         saved?.let {
+            haptics.success()
+            com.blurt.app.ui.components.BlurtSound.playSave()
             viewModel.onSavedHandled()
             onSaved()
         }
@@ -150,7 +181,8 @@ fun VoiceScreen(
         AnimatedContent(
             targetState = phase,
             transitionSpec = {
-                fadeIn(tween(220)) togetherWith fadeOut(tween(160))
+                val rise = slideInVertically(tween(360)) { it / 4 }
+                (fadeIn(tween(220)) + rise) togetherWith fadeOut(tween(160))
             },
             label = "voicePhase",
             modifier = Modifier
@@ -159,7 +191,7 @@ fun VoiceScreen(
         ) { current ->
             when (current) {
                 VoicePhase.IDLE -> IdleState(
-                    onMicTapped = viewModel::onMicTapped,
+                    onMicTapped = onMicTapped,
                     onType = { onEdit("") },
                     error = error,
                 )
@@ -167,7 +199,7 @@ fun VoiceScreen(
                     transcript = transcript,
                     progressive = progressive,
                     level = level,
-                    onStop = viewModel::stop,
+                    onStop = onStop,
                     onCancel = viewModel::cancel,
                 )
                 VoicePhase.ANALYZING -> AnalyzingState(transcript = transcript)
@@ -193,7 +225,7 @@ fun VoiceScreen(
     }
 }
 
-/** The resting state: a large gold mic, nothing else to think about. */
+/** The resting state: a large blue mic, nothing else to think about. */
 @Composable
 private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String?) {
     Column(
@@ -211,7 +243,7 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Tap the mic and just say it — Blurt figures out the rest.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
@@ -262,7 +294,7 @@ private fun ListeningState(
         Spacer(Modifier.height(20.dp))
         Text(
             text = "Listening",
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(4.dp))
@@ -304,7 +336,7 @@ private fun ListeningState(
                 onClick = onStop,
                 interactionSource = stopSource,
                 modifier = Modifier.blurtPressScale(stopSource),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -350,7 +382,11 @@ private fun AnalyzingState(transcript: String) {
     }
 }
 
-/** \"Message ChatGPT — Reminder · in 4 minutes — Save Blurt / Edit\". */
+/**
+ * The confirm moment — a sheet emerging from the bottom: REMINDER in blue
+ * caps, the understood blurt in Title 1, a time row, and the single blue
+ * action (Save Blurt) with a ghost Edit. No forms — the AI decided.
+ */
 @Composable
 private fun ConfirmState(
     transcript: String,
@@ -363,91 +399,142 @@ private fun ConfirmState(
 ) {
     val hasReminder = analysis?.reminderAt?.let { it > System.currentTimeMillis() } == true
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(36.dp))
-        Text(
-            text = transcript,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 10.dp),
-        )
-        Spacer(Modifier.height(20.dp))
-        analysis?.let { UnderstandingChips(analysis = it, large = true) }
-        if (!hasReminder && analysis?.reminderAt != null) {
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = "That time has already passed — saved as a note.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-            )
-        }
-        notice?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-        }
-
+    Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
-
-        val saveSource = rememberBlurtInteractionSource()
-        Button(
-            onClick = onSave,
-            interactionSource = saveSource,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .blurtPressScale(saveSource),
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = com.blurt.app.ui.theme.BlurtRadii.xl,
+                topEnd = com.blurt.app.ui.theme.BlurtRadii.xl,
             ),
+            color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
-            Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val editSource = rememberBlurtInteractionSource()
-            TextButton(onClick = onEdit, interactionSource = editSource, modifier = Modifier.blurtPressScale(editSource)) {
-                Text("Edit", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (hasReminder) {
-                Spacer(Modifier.width(10.dp))
-                Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(10.dp))
-                val quietSource = rememberBlurtInteractionSource()
-                TextButton(
-                    onClick = onSaveWithoutReminder,
-                    interactionSource = quietSource,
-                    modifier = Modifier.blurtPressScale(quietSource),
+            Column(
+                modifier = Modifier.padding(
+                    start = 24.dp,
+                    end = 24.dp,
+                    top = 28.dp,
+                    bottom = 24.dp,
+                ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (hasReminder) {
+                    Text(
+                        text = "REMINDER",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                Text(
+                    text = transcript,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(20.dp))
+                if (hasReminder && analysis?.reminderAt != null) {
+                    // The time row — bell in a blue-soft tile, plain words.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = BlurtIcons.Bell,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "in ${TimeFormat.inDuration(analysis.reminderAt)} · ${analysis.intent.label}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(18.dp))
+                } else {
+                    analysis?.let { UnderstandingChips(analysis = it, large = true) }
+                    Spacer(Modifier.height(18.dp))
+                }
+                if (!hasReminder && analysis?.reminderAt != null) {
+                    Text(
+                        text = "That time has already passed — saved as a note.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                error?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                notice?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                val saveSource = rememberBlurtInteractionSource()
+                Button(
+                    onClick = onSave,
+                    interactionSource = saveSource,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .blurtPressScale(saveSource),
+                    shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
-                    Text("Save without reminder", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val editSource = rememberBlurtInteractionSource()
+                    TextButton(onClick = onEdit, interactionSource = editSource, modifier = Modifier.blurtPressScale(editSource)) {
+                        Text("Edit", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (hasReminder) {
+                        Spacer(Modifier.width(10.dp))
+                        Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(10.dp))
+                        val quietSource = rememberBlurtInteractionSource()
+                        TextButton(
+                            onClick = onSaveWithoutReminder,
+                            interactionSource = quietSource,
+                            modifier = Modifier.blurtPressScale(quietSource),
+                        ) {
+                            Text("Save without reminder", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
     }
 }
 
-/** A brief gold check — then the screen pops itself. */
+/** A brief blue check — then the screen pops itself. */
 @Composable
 private fun SavedState() {
     Column(
@@ -516,6 +603,8 @@ private fun VoiceButton(listening: Boolean, level: Float, onClick: () -> Unit) {
             animationSpec = tween(120),
             label = "micPress",
         )
+        // A solid system-blue circle with a white glyph — the Voice Memos
+        // record button, tinted to Blurt's blue. No glass, no border, no gold.
         Surface(
             onClick = onClick,
             interactionSource = interactionSource,

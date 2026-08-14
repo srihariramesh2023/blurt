@@ -1,6 +1,8 @@
 package com.blurt.app
 
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,35 +14,56 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -51,6 +74,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.blurt.app.auth.AuthState
 import com.blurt.app.auth.AuthUser
+import com.blurt.app.ui.components.LocalBlurtListState
 import com.blurt.app.ui.components.BlurtLogo
 import com.blurt.app.ui.login.LoginScreen
 import com.blurt.app.ui.navigation.BlurtNavHost
@@ -174,6 +198,7 @@ private fun BlurtMainScaffold(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val showBottomBar = currentRoute in TAB_ROUTES
 
     // Opened from a reminder notification → jump straight to that blurt.
     val pendingId by openCaptureId
@@ -183,62 +208,172 @@ private fun BlurtMainScaffold(
         openCaptureId.value = null
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            if (currentRoute in listOf(BlurtRoutes.HOME, BlurtRoutes.LIBRARY, BlurtRoutes.SEARCH)) {
-                BlurtBottomBar(navController = navController, currentRoute = currentRoute)
-            }
-        },
-    ) { innerPadding ->
+    // One list state per tab screen, shared by the sharp content and the
+    // frosted backdrop copy so both scroll in lockstep. The explicit Saver
+    // is required — autoSaver only handles Bundle types.
+    val listState = rememberSaveable(currentRoute, saver = LazyListState.Saver) { LazyListState() }
+
+    // Real backdrop frost: RenderEffect blur on a duplicate layer behind the
+    // bar. Only on API 31+ and when the OS isn't asking for reduced motion /
+    // transparency (Android has no public "reduce transparency" toggle, so
+    // the animator-scale setting is the honest proxy — the standard's
+    // fallback is a solid surface).
+    val context = LocalContext.current
+    val canBlur = remember {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f,
+            ) != 0f
+    }
+
+    // The frosted region's height: the bar (80dp) + the system nav inset,
+    // refined to the exact measured height after first layout.
+    val density = LocalDensity.current
+    val navInsetPx = with(density) {
+        WindowInsets.navigationBars.asPaddingValues(this).calculateBottomPadding().toPx()
+    }
+    val estimatedBarPx = with(density) { 80.dp.toPx() } + navInsetPx
+    var barHeightPx by remember { mutableStateOf(estimatedBarPx) }
+
+    // The screen content, composed once for the sharp layer and once for the
+    // frosted backdrop. Both copies use the identical modifier chain so their
+    // pixels align exactly.
+    val content: @Composable () -> Unit = {
         BlurtNavHost(
             navController = navController,
             user = user,
             themeMode = themeMode,
             onThemeChange = onThemeChange,
             onSignOut = onSignOut,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                // On tabbed screens the list scrolls under the glass bar and
+                // the system nav area; everywhere else content stops above the
+                // nav bar so nothing hides behind the gesture pill.
+                .then(if (showBottomBar) Modifier else Modifier.navigationBarsPadding()),
         )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        CompositionLocalProvider(LocalBlurtListState provides listState) {
+            // Sharp content — the real, interactive layer.
+            content()
+
+            if (showBottomBar) {
+                // Frosted backdrop: the same content, blurred by a RenderEffect
+                // on this layer and clipped to the bar region. Whatever scrolls
+                // beneath visibly frosts — the point of the glass.
+                if (canBlur) {
+                    val blurRadius = with(density) { 24.dp.toPx() }
+                    val blurEffect = remember(blurRadius) {
+                        BlurEffect(blurRadius, blurRadius, TileMode.Mirror)
+                    }
+                    val frostShape = remember(barHeightPx) { BottomBarShape(barHeightPx) }
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                clip = true
+                                shape = frostShape
+                                renderEffect = blurEffect
+                            },
+                    ) {
+                        content()
+                    }
+                }
+
+                // The sharp bar on top: a translucent tint over the frost
+                // (solid elevated surface when the OS requests reduced
+                // transparency, translucent when blur isn't available).
+                Box(Modifier.align(Alignment.BottomCenter)) {
+                    BlurtBottomBar(
+                        navController = navController,
+                        currentRoute = currentRoute,
+                        frosted = canBlur,
+                        onMeasured = { barHeightPx = it },
+                    )
+                }
+            }
+        }
     }
 }
 
 /**
- * Minimal three-tab bar. The active tab is gold with a subtle gold indicator;
- * the rest stay muted. No borders, no badges — quiet, like the rest of Blurt.
+ * Minimal three-tab bar, resting on a hairline: the active tab turns system blue,
+ * the rest stay muted. No indicator pill, no badges — quiet, like the rest
+ * of Blurt. The bar appears only on the three tabbed screens (never login,
+ * detail, or capture).
+ *
+ * Glass: when [frosted] the RenderEffect backdrop does the frosting, so the
+ * bar's own tint stays light and the content behind visibly blurs through
+ * it. When reduced transparency is requested the bar turns into a solid
+ * elevated surface; below API 31 it's a translucent frost.
  */
 @Composable
-private fun BlurtBottomBar(navController: NavHostController, currentRoute: String?) {
+private fun BlurtBottomBar(
+    navController: NavHostController,
+    currentRoute: String?,
+    frosted: Boolean,
+    onMeasured: (Float) -> Unit,
+) {
     val items = listOf(
         BottomItem(BlurtRoutes.HOME, Icons.Filled.Home, stringResource(com.blurt.app.R.string.nav_home)),
         BottomItem(BlurtRoutes.LIBRARY, Icons.AutoMirrored.Filled.List, stringResource(com.blurt.app.R.string.nav_library)),
         BottomItem(BlurtRoutes.SEARCH, Icons.Filled.Search, stringResource(com.blurt.app.R.string.nav_search)),
     )
+    // Solid elevated surface when the OS requests reduced transparency.
+    val reducedTransparency =
+        Settings.Global.getFloat(
+            LocalContext.current.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) == 0f
 
-    NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-        items.forEach { item ->
-            val selected = currentRoute == item.route
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(BlurtRoutes.HOME) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = {
-                    Icon(item.icon, contentDescription = item.label, modifier = Modifier.size(22.dp))
-                },
-                label = { Text(item.label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor = if (selected) MaterialTheme.colorScheme.primaryContainer
-                    else androidx.compose.ui.graphics.Color.Transparent,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+    Column(
+        modifier = Modifier.onSizeChanged { onMeasured(it.height.toFloat()) },
+    ) {
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            thickness = 0.5.dp,
+        )
+        NavigationBar(
+            containerColor = when {
+                reducedTransparency -> MaterialTheme.colorScheme.surfaceVariant
+                frosted -> MaterialTheme.colorScheme.background.copy(alpha = 0.38f)
+                else -> MaterialTheme.colorScheme.background.copy(alpha = 0.82f)
+            },
+        ) {
+            items.forEach { item ->
+                val selected = currentRoute == item.route
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = {
+                        navController.navigate(item.route) {
+                            popUpTo(BlurtRoutes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = {
+                        Icon(item.icon, contentDescription = item.label, modifier = Modifier.size(22.dp))
+                    },
+                    label = { Text(item.label) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
         }
     }
 }
@@ -248,3 +383,29 @@ private data class BottomItem(
     val icon: ImageVector,
     val label: String,
 )
+
+private val TAB_ROUTES = listOf(BlurtRoutes.HOME, BlurtRoutes.LIBRARY, BlurtRoutes.SEARCH)
+
+/**
+ * A shape covering only the bottom [barHeightPx] of its bounds — used to clip
+ * the frosted backdrop to exactly the glass bar's region, so the frost never
+ * bleeds above the hairline.
+ */
+private class BottomBarShape(private val barHeightPx: Float) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): Outline {
+        val top = size.height - barHeightPx
+        return Outline.Generic(
+            Path().apply {
+                moveTo(0f, top)
+                lineTo(size.width, top)
+                lineTo(size.width, size.height)
+                lineTo(0f, size.height)
+                close()
+            },
+        )
+    }
+}

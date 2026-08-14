@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blurt — Full App · Premium Mockup</title>
+<style>
+  :root {
+    --bg: #000000;
+    --surface: #161616;
+    --elevated: #1C1C1E;
+    --text: #F5F5F7;
+    --muted: #98989D;
+    --faint: #5C5C60;
+    --gold: #007AFF;
+    --gold-soft: rgba(0, 122, 255, 0.16);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: radial-gradient(120% 90% at 50% 0%, #0B0B0D 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: var(--font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    padding: 30px 0;
+    overflow-x: hidden;
+  }
+
+  .phone {
+    position: relative;
+    width: 393px;
+    height: 800px;
+    background: var(--bg);
+    border-radius: 44px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow:
+      0 40px 90px rgba(0,0,0,0.75),
+      0 0 0 10px rgba(0,0,0,0.35),
+      inset 0 0 0 1px rgba(255,255,255,0.04);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .statusbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 60;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 30px 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.2px;
+  }
+
+  /* ------- screens ------- */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.32, 0.72, 0.28, 1);
+    transform: translateY(8px);
+    background: var(--bg);
+  }
+  .screen.active { opacity: 1; visibility: visible; transform: translateY(0); }
+  .screen .inner { flex: 1; display: flex; flex-direction: column; padding-top: 52px; min-height: 0; }
+  .scroll { flex: 1; overflow-y: auto; padding-bottom: 70px; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* ------- shared bits ------- */
+  .page-title { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; padding: 8px 26px 4px; }
+  .back-row { display: flex; align-items: center; gap: 6px; padding: 2px 22px 0; }
+  .back { width: 34px; height: 34px; display: grid; place-items: center; color: var(--text); cursor: pointer; border-radius: 50%; }
+  .back:hover { background: rgba(255,255,255,0.06); }
+
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 55;
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 12px 30px 18px;
+    border-top: 1px solid var(--hairline);
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .tab { font-size: 10px; font-weight: 500; color: var(--faint); text-align: center; letter-spacing: 0.3px; cursor: pointer; transition: color 0.2s; }
+  .tab svg { width: 22px; height: 22px; margin: 0 auto 3px; display: block; }
+  .tab.active { color: var(--gold); }
+
+  .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; color: var(--text); opacity: 0.85; cursor: pointer; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, #4A4A4E, #2A2A2E);
+    border: 1px solid var(--hairline);
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 600; color: var(--text);
+    cursor: pointer;
+  }
+
+  /* ------- login ------- */
+  #login .inner { padding-top: 0; align-items: center; justify-content: center; }
+  .login-glow {
+    position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 460px; height: 460px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,122,255,0.14), transparent 65%);
+    pointer-events: none;
+  }
+  .login-mark {
+    width: 92px; height: 92px; border-radius: 26px;
+    background:
+      radial-gradient(120% 120% at 30% 25%, rgba(255,255,255,0.10), rgba(255,255,255,0.02) 42%, rgba(0,0,0,0.15) 100%),
+      linear-gradient(180deg, #26262A, #17171A);
+    border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -10px 20px rgba(0,0,0,0.45), 0 18px 40px rgba(0,0,0,0.5);
+    display: grid; place-items: center;
+    margin-bottom: 24px;
+  }
+  .login-mark svg { width: 46px; height: 46px; color: var(--gold); }
+  .login-word { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; }
+  .login-tag { margin-top: 12px; font-size: 16px; color: var(--muted); text-align: center; line-height: 1.5; max-width: 260px; font-weight: 400; }
+  .login-google {
+    margin-top: 56px;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 320px; height: 54px;
+    border-radius: 16px;
+    background: #FFFFFF; color: #1D1D1F;
+    font-size: 16px; font-weight: 600;
+    border: none; cursor: pointer;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.9);
+    transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1), filter 0.16s ease;
+  }
+  .login-google:active { transform: scale(0.97); filter: brightness(0.95); }
+  .login-google .g { width: 22px; height: 22px; }
+  .login-privacy { position: absolute; bottom: 70px; font-size: 12px; color: var(--faint); text-align: center; max-width: 280px; line-height: 1.6; }
+  .login-privacy b { color: var(--muted); font-weight: 500; }
+
+  /* ------- home ------- */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 6px 26px 0; }
+  .brand h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .brand .date { margin-top: 5px; font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: 0.1px; }
+  .header .actions { display: flex; gap: 10px; align-items: center; padding-top: 6px; }
+
+  .capture { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .mic-wrap { position: relative; width: 168px; height: 168px; display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .mic {
+    position: relative;
+    width: 118px; height: 118px;
+    border-radius: 50%;
+    background:
+      radial-gradient(120% 120% at 30% 25%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 42%, rgba(0,0,0,0.12) 100%),
+      linear-gradient(180deg, #232326, #17171A);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -8px 18px rgba(0,0,0,0.45), 0 14px 34px rgba(0,0,0,0.55);
+    display: grid; place-items: center;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease;
+  }
+  .mic svg { width: 46px; height: 46px; color: var(--text); }
+  .mic svg .mic-body { fill: currentColor; }
+  .mic svg .mic-ring { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; opacity: 0.9; }
+  .halo { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(0,122,255,0.14); animation: breathe 3.4s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.08); opacity: 0.35; } }
+  .mic-wrap.recording .mic { transform: scale(0.88); border-color: rgba(0,122,255,0.45); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -10px 22px rgba(0,0,0,0.5), 0 0 0 5px var(--gold-soft), 0 0 46px rgba(0,122,255,0.28), 0 18px 44px rgba(0,0,0,0.6); }
+  .mic-wrap.recording .mic svg { color: var(--gold); }
+  .record-ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(0,122,255,0.5); transform: scale(0.55); opacity: 0; pointer-events: none; }
+  .mic-wrap.recording .record-ring { animation: ring-expand 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  @keyframes ring-expand { 0% { transform: scale(0.55); opacity: 0.9; } 100% { transform: scale(1.35); opacity: 0; } }
+  .waveform { margin-top: 26px; height: 54px; display: flex; align-items: center; justify-content: center; gap: 4px; opacity: 0; transform: translateY(6px); transition: opacity 0.3s ease, transform 0.3s ease; }
+  .waveform.on { opacity: 1; transform: translateY(0); }
+  .waveform .bar { width: 4px; border-radius: 2px; background: linear-gradient(180deg, var(--gold), rgba(0,122,255,0.55)); height: 8px; transition: height 0.11s ease-out; box-shadow: 0 0 10px rgba(0,122,255,0.35); }
+  .transcript { margin-top: 22px; max-width: 310px; text-align: center; min-height: 58px; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.32; color: var(--text); opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.35s ease; }
+  .transcript.on { opacity: 1; transform: translateY(0); }
+  .transcript .cursor { display: inline-block; width: 2px; height: 1em; background: var(--gold); vertical-align: -0.15em; margin-left: 2px; animation: blink 0.9s steps(2) infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .chip { margin-top: 18px; display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: var(--gold-soft); border: 1px solid rgba(0,122,255,0.32); color: var(--gold); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; opacity: 0; transform: translateY(8px) scale(0.94); transition: opacity 0.3s cubic-bezier(0.34,1.56,0.64,1), transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  .chip.on { opacity: 1; transform: translateY(0) scale(1); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: pulse-dot 1.2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .hint { margin-top: 22px; font-size: 14px; color: var(--muted); font-weight: 400; letter-spacing: 0.2px; transition: opacity 0.25s ease; }
+  .hint.hidden { opacity: 0; }
+
+  .recent { padding: 14px 26px 24px; }
+  .recent-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .recent-head h2 { font-size: 15px; font-weight: 600; letter-spacing: 0.1px; }
+  .recent-head a { font-size: 13px; color: var(--muted); text-decoration: none; font-weight: 500; cursor: pointer; }
+  .blurt-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; cursor: pointer; border-radius: 10px; }
+  .blurt-row:hover { background: rgba(255,255,255,0.03); }
+  .blurt-row + .blurt-row { border-top: 1px solid rgba(255,255,255,0.05); }
+  .blurt-type { width: 28px; height: 28px; border-radius: 9px; background: var(--elevated); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 12px; flex-shrink: 0; }
+  .blurt-row .body { flex: 1; min-width: 0; }
+  .blurt-row .body .txt { font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .blurt-row .body .meta { margin-top: 2px; font-size: 12px; color: var(--faint); font-weight: 500; letter-spacing: 0.2px; }
+  .blurt-row .badge { font-size: 11px; font-weight: 600; color: var(--gold); background: var(--gold-soft); padding: 3px 9px; border-radius: 999px; letter-spacing: 0.3px; flex-shrink: 0; }
+  .bell-tag { font-size: 11px; color: var(--gold); }
+
+  /* ------- library ------- */
+  .lib-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 26px 0; }
+  .lib-head .count { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .add-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(180deg, #E6B95F, #C99A44);
+    color: #1A1405; font-size: 24px; font-weight: 500;
+    display: grid; place-items: center; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,122,255,0.3), inset 0 1px 0 rgba(255,255,255,0.4);
+    transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .add-btn:active { transform: scale(0.92); }
+  .chips { display: flex; gap: 8px; padding: 16px 26px 6px; overflow-x: auto; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip-pill {
+    flex-shrink: 0;
+    padding: 8px 15px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.1px;
+    color: var(--muted); background: var(--surface);
+    border: 1px solid var(--hairline); cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .chip-pill.active { color: #1A1405; background: linear-gradient(180deg, #E6B95F, #C99A44); border-color: transparent; box-shadow: 0 4px 14px rgba(0,122,255,0.3); }
+  .lib-list { padding: 10px 26px 0; }
+  .lib-row { display: flex; align-items: center; gap: 14px; padding: 14px 2px; cursor: pointer; border-radius: 12px; }
+  .lib-row:hover { background: rgba(255,255,255,0.03); }
+  .lib-row + .lib-row { border-top: 1px solid rgba(255,255,255,0.05); }
+  .lib-icon { width: 38px; height: 38px; border-radius: 12px; background: var(--elevated); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 16px; flex-shrink: 0; }
+  .lib-body { flex: 1; min-width: 0; }
+  .lib-body .t { font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-body .m { margin-top: 3px; font-size: 12px; color: var(--faint); font-weight: 500; letter-spacing: 0.2px; }
+  .lib-body .m .gold { color: var(--gold); }
+  .lib-arrow { color: var(--faint); font-size: 18px; }
+  .section-label { font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: var(--faint); text-transform: uppercase; padding: 22px 26px 4px; }
+
+  /* ------- search ------- */
+  .search-field-wrap { padding: 14px 26px 8px; }
+  .search-field {
+    display: flex; align-items: center; gap: 10px;
+    height: 44px; padding: 0 16px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .search-field.focus { border-color: rgba(0,122,255,0.5); box-shadow: 0 0 0 3px var(--gold-soft); }
+  .search-field svg { width: 17px; height: 17px; color: var(--faint); flex-shrink: 0; }
+  .search-field input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 16px; font-family: var(--font); }
+  .search-field input::placeholder { color: var(--faint); }
+  .suggest { padding: 16px 26px 4px; }
+  .suggest .lab { font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: var(--gold); text-transform: uppercase; margin-bottom: 10px; }
+  .suggest-row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; cursor: pointer; }
+  .suggest-row .spark { color: var(--gold); font-size: 14px; }
+  .suggest-row .t { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .search-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding-bottom: 80px; }
+  .search-empty .big { font-size: 18px; font-weight: 600; }
+  .search-empty .sub { font-size: 14px; color: var(--muted); max-width: 240px; text-align: center; line-height: 1.5; }
+  .result-badge { font-size: 11px; font-weight: 600; color: var(--gold); background: var(--gold-soft); padding: 4px 10px; border-radius: 999px; letter-spacing: 0.2px; }
+
+  /* ------- detail ------- */
+  .detail-body { padding: 14px 26px 0; }
+  .detail-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; background: var(--gold-soft); border: 1px solid rgba(0,122,255,0.32); color: var(--gold); font-size: 13px; font-weight: 600; }
+  .detail-title { margin-top: 18px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; }
+  .detail-meta { margin-top: 14px; font-size: 13px; color: var(--faint); font-weight: 500; letter-spacing: 0.2px; }
+  .detail-reminder { margin-top: 22px; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--hairline); }
+  .detail-reminder .bell { width: 34px; height: 34px; border-radius: 50%; background: var(--gold-soft); border: 1px solid rgba(0,122,255,0.35); display: grid; place-items: center; font-size: 15px; }
+  .detail-reminder .t { font-size: 14px; font-weight: 600; }
+  .detail-reminder .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .detail-actions { display: flex; gap: 10px; padding: 24px 26px 12px; }
+  .act {
+    flex: 1; height: 46px; border-radius: 13px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--hairline);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), background 0.15s ease;
+  }
+  .act:active { transform: scale(0.96); background: rgba(255,255,255,0.09); }
+  .act.gold { color: var(--gold); border-color: rgba(0,122,255,0.4); }
+  .act.danger { color: #FF6B5E; border-color: rgba(255,107,94,0.3); }
+
+  /* ------- profile ------- */
+  #profile { z-index: 40; }
+  .prof-head { display: flex; flex-direction: column; align-items: center; padding: 26px 26px 0; }
+  .prof-avatar { width: 84px; height: 84px; border-radius: 50%; background: linear-gradient(135deg, #5A5A60, #2A2A2E); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 30px; font-weight: 700; box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .prof-name { margin-top: 14px; font-size: 21px; font-weight: 700; }
+  .prof-mail { margin-top: 4px; font-size: 14px; color: var(--muted); }
+  .prof-group { margin-top: 26px; padding: 4px 26px; }
+  .prof-group .glab { font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: var(--faint); text-transform: uppercase; margin-bottom: 8px; }
+  .prof-card { border-radius: 18px; background: var(--elevated); border: 1px solid var(--hairline); overflow: hidden; }
+  .prof-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+  .prof-row + .prof-row { border-top: 1px solid rgba(255,255,255,0.05); }
+  .prof-row .ico { width: 30px; height: 30px; border-radius: 9px; background: var(--surface); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 14px; flex-shrink: 0; }
+  .prof-row .lab { flex: 1; font-size: 15px; font-weight: 500; }
+  .prof-row .val { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .prof-row .check { color: var(--gold); font-size: 14px; }
+  .prof-row .dot-green { width: 8px; height: 8px; border-radius: 50%; background: #4CD964; box-shadow: 0 0 8px rgba(76,217,100,0.6); }
+  .prof-row.danger .lab { color: #FF6B5E; }
+
+  /* ------- sheets / overlays ------- */
+  .overlay {
+    position: absolute; inset: 0; z-index: 45;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.32s ease;
+  }
+  .overlay.on { opacity: 1; visibility: visible; pointer-events: auto; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 46;
+    background: linear-gradient(180deg, rgba(28,28,30,0.92), rgba(22,22,24,0.97));
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    border-radius: 28px 28px 0 0;
+    padding: 22px 26px 28px;
+    transform: translateY(105%);
+    transition: transform 0.42s cubic-bezier(0.32, 0.72, 0.28, 1);
+    box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
+  }
+  .sheet.on { transform: translateY(0); }
+  .grab { width: 38px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.22); margin: 0 auto 18px; }
+  .sheet .label { font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: var(--gold); text-transform: uppercase; margin-bottom: 8px; }
+  .sheet .title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; }
+  .sheet .time-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .sheet .bell { width: 30px; height: 30px; border-radius: 50%; background: var(--gold-soft); border: 1px solid rgba(0,122,255,0.35); display: grid; place-items: center; font-size: 14px; }
+  .sheet .time { font-size: 16px; font-weight: 600; }
+  .sheet .time small { color: var(--muted); font-weight: 500; font-size: 13px; margin-left: 8px; }
+  .sheet .actions { display: flex; gap: 12px; margin-top: 26px; }
+  .btn { flex: 1; height: 50px; border-radius: 14px; font-size: 16px; font-weight: 600; border: none; cursor: pointer; display: grid; place-items: center; transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1), filter 0.16s ease; font-family: var(--font); }
+  .btn:active { transform: scale(0.965); }
+  .btn.primary { background: linear-gradient(180deg, #E6B95F, #C99A44); color: #1A1405; box-shadow: 0 8px 22px rgba(0,122,255,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
+  .btn.primary:active { filter: brightness(0.94); }
+  .btn.ghost { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
+  .btn.ghost:active { filter: brightness(1.15); }
+
+  /* ------- page controls ------- */
+  .controls { display: flex; align-items: center; gap: 10px; margin-top: 26px; }
+  .screen-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: rgba(255,255,255,0.14);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .screen-dot.active { background: var(--gold); transform: scale(1.35); }
+  .screen-labels { display: flex; gap: 14px; margin-top: 12px; }
+  .screen-labels span { font-size: 11px; color: var(--faint); font-weight: 500; letter-spacing: 0.4px; cursor: pointer; transition: color 0.2s; }
+  .screen-labels span.active { color: var(--gold); }
+
+  .caption {
+    position: absolute; top: 84px; right: -214px;
+    width: 200px;
+    background: rgba(22,22,24,0.92);
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(14px);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 12px 15px;
+    border-radius: 14px;
+    line-height: 1.5;
+    z-index: 70;
+  }
+  .caption b { color: var(--gold); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <div class="statusbar">
+    <span class="time" id="statusTime">9:41</span>
+    <span class="icons" style="font-size:12px;letter-spacing:3px;">▂▄▆ 📶 🔋</span>
+  </div>
+
+  <!-- ================= LOGIN ================= -->
+  <div class="screen active" id="login">
+    <div class="login-glow"></div>
+    <div class="inner">
+      <div class="login-mark">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.48 3 2 6.58 2 11c0 2.52 1.35 4.76 3.42 6.23L4 21l4.05-1.5c1.24.35 2.57.5 3.95.5 5.52 0 10-3.58 10-8s-4.48-8-10-8zm0 5.5l1.35 2.65L16 12.5l-2.65 1.35L12 16.5l-1.35-2.65L8 12.5l2.65-1.35L12 8.5z"/></svg>
+      </div>
+      <div class="login-word">Blurt</div>
+      <div class="login-tag">Say it. Blurt figures out the rest — reminders, tasks, ideas, kept for you.</div>
+      <button class="login-google" onclick="goHome()">
+        <svg class="g" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+      <div class="login-privacy">Your blurts sync privately to your account.<br>No card needed — <b>bring your own free AI keys</b> in Settings.</div>
+    </div>
+  </div>
+
+  <!-- ================= HOME ================= -->
+  <div class="screen" id="home">
+    <div class="inner">
+      <div class="header">
+        <div class="brand">
+          <h1>Blurt</h1>
+          <div class="date">Friday, August 14</div>
+        </div>
+        <div class="actions">
+          <div class="icon-btn" onclick="showScreen('search')">🔍</div>
+          <div class="avatar" onclick="showScreen('profile')">SR</div>
+        </div>
+      </div>
+
+      <div class="capture">
+        <div class="mic-wrap" id="micWrap">
+          <div class="halo"></div>
+          <div class="record-ring"></div>
+          <div class="mic" id="micBtn">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path class="mic-body" d="M12 15.2c1.9 0 3.4-1.5 3.4-3.4V6.4a3.4 3.4 0 1 0-6.8 0v5.4c0 1.9 1.5 3.4 3.4 3.4z"/>
+              <path class="mic-ring" d="M17.6 11.4a5.6 5.6 0 0 1-11.2 0M12 17v3.4M8.8 20.8h6.4"/>
+            </svg>
+          </div>
+        </div>
+        <div class="waveform" id="wave"></div>
+        <div class="transcript" id="transcript"></div>
+        <div class="chip" id="chip"><span class="dot"></span><span id="chipText">Reminder · in 4 minutes</span></div>
+        <div class="hint" id="hint">Tap the mic and say it — Blurt figures out the rest.</div>
+      </div>
+
+      <div class="recent">
+        <div class="recent-head"><h2>Recent Blurts</h2><a onclick="showScreen('library')">See all</a></div>
+        <div class="blurt-row" onclick="showScreen('detail')">
+          <div class="blurt-type">🔔</div>
+          <div class="body"><div class="txt">Message ChatGPT in 4 minutes</div><div class="meta">REMINDER · 9:45 AM · TODAY</div></div>
+        </div>
+        <div class="blurt-row" onclick="showScreen('detail')">
+          <div class="blurt-type">💡</div>
+          <div class="body"><div class="txt">Change the Blurt logo to gold</div><div class="meta">IDEA · YESTERDAY</div></div>
+        </div>
+        <div class="blurt-row" onclick="showScreen('detail')">
+          <div class="blurt-type">📝</div>
+          <div class="body"><div class="txt">Finish science homework tonight</div><div class="meta">TASK · TODAY</div></div>
+          <div class="badge">★</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LIBRARY ================= -->
+  <div class="screen" id="library">
+    <div class="inner">
+      <div class="lib-head">
+        <div><div class="page-title">Library</div><div class="count">12 blurts · 4 categories</div></div>
+        <div class="add-btn" onclick="showScreen('home')">+</div>
+      </div>
+
+      <div class="chips">
+        <div class="chip-pill active">All</div>
+        <div class="chip-pill">🔔 Reminders</div>
+        <div class="chip-pill">✅ Tasks</div>
+        <div class="chip-pill">💡 Ideas</div>
+        <div class="chip-pill">★ Important</div>
+        <div class="chip-pill">📦 Archived</div>
+      </div>
+      <div class="chips" style="padding-top:8px;">
+        <div class="chip-pill">Work</div>
+        <div class="chip-pill">Health</div>
+        <div class="chip-pill">Finance</div>
+        <div class="chip-pill">Travel</div>
+        <div class="chip-pill">Ideas</div>
+        <div class="chip-pill">Home</div>
+      </div>
+
+      <div class="scroll">
+        <div class="section-label">Today</div>
+        <div class="lib-list">
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">🔔</div>
+            <div class="lib-body"><div class="t">Message ChatGPT in 4 minutes</div><div class="m"><span class="gold">REMINDER</span> · 9:45 AM</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">📝</div>
+            <div class="lib-body"><div class="t">Finish science homework tonight</div><div class="m">TASK · HOME</div></div>
+            <div class="lib-arrow" style="color:var(--gold)">★</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">💡</div>
+            <div class="lib-body"><div class="t">Change the Blurt logo to gold</div><div class="m">IDEA · IDEAS</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+        </div>
+        <div class="section-label">Yesterday</div>
+        <div class="lib-list">
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">🦷</div>
+            <div class="lib-body"><div class="t">Dentist appointment tomorrow at 3pm</div><div class="m"><span class="gold">REMINDER</span> · HEALTH · 3:00 PM</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">✈️</div>
+            <div class="lib-body"><div class="t">vacation</div><div class="m">NOTE · TRAVEL</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">📝</div>
+            <div class="lib-body"><div class="t">Buy a USB-C cable</div><div class="m">TASK · SHOPPING</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">🔗</div>
+            <div class="lib-body"><div class="t">That YouTube video about space</div><div class="m">LINK · LEARNING</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SEARCH ================= -->
+  <div class="screen" id="search">
+    <div class="inner">
+      <div class="page-title">Search</div>
+      <div class="search-field-wrap">
+        <div class="search-field" id="searchField">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+          <input placeholder="Search your blurts" id="searchInput" onfocus="this.closest('.search-field').classList.add('focus')" onblur="this.closest('.search-field').classList.remove('focus')">
+        </div>
+      </div>
+
+      <!-- results -->
+      <div class="scroll" id="searchResults">
+        <div class="result-badge" style="margin:6px 26px 0; display:inline-block;">✨ meaning match</div>
+        <div class="lib-list">
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">🦷</div>
+            <div class="lib-body"><div class="t">Dentist appointment tomorrow at 3pm</div><div class="m"><span class="gold">MATCHES “teeth”</span> · HEALTH</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+          <div class="lib-row" onclick="showScreen('detail')">
+            <div class="lib-icon">📝</div>
+            <div class="lib-body"><div class="t">Buy a USB-C cable</div><div class="m">MATCHES “teeth” · SHOPPING</div></div>
+            <div class="lib-arrow">›</div>
+          </div>
+        </div>
+        <div class="suggest">
+          <div class="lab">Suggested</div>
+          <div class="suggest-row"><span class="spark">✦</span><span class="t">"that thing about my project"</span></div>
+          <div class="suggest-row"><span class="spark">✦</span><span class="t">"ideas for the new logo"</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DETAIL ================= -->
+  <div class="screen" id="detail">
+    <div class="inner">
+      <div class="back-row"><div class="back" onclick="showScreen('library')">‹</div></div>
+      <div class="scroll">
+        <div class="detail-body">
+          <span class="detail-chip">🔔 Reminder · Health</span>
+          <div class="detail-title">Dentist appointment<br>tomorrow at 3pm</div>
+          <div class="detail-meta">TODAY · 10:24 AM · EDITED</div>
+
+          <div class="detail-reminder">
+            <div class="bell">🔔</div>
+            <div>
+              <div class="t">Remind me at 3:00 PM</div>
+              <div class="s">A Blurt notification will pop up when it's time.</div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <div class="act gold">★ Important</div>
+          <div class="act">📦 Archive</div>
+          <div class="act danger">🗑 Delete</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PROFILE ================= -->
+  <div class="screen" id="profile">
+    <div class="inner" style="padding-top:0;">
+      <div class="prof-head">
+        <div class="prof-avatar">SR</div>
+        <div class="prof-name">Srihari Ramesh</div>
+        <div class="prof-mail">srihariramesh2023@gmail.com</div>
+      </div>
+
+      <div class="prof-group">
+        <div class="glab">Appearance</div>
+        <div class="prof-card">
+          <div class="prof-row"><div class="ico">🖥</div><div class="lab">System</div><div class="val">Follow device</div></div>
+          <div class="prof-row"><div class="ico">☀️</div><div class="lab">Light</div><div class="check">✓</div></div>
+          <div class="prof-row"><div class="ico">🌙</div><div class="lab">Dark</div></div>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <div class="glab">AI keys — yours, encrypted on device</div>
+        <div class="prof-card">
+          <div class="prof-row" onclick="showScreen('home')">
+            <div class="ico" style="color:var(--gold)">⚡</div>
+            <div class="lab">Groq — classification</div>
+            <div class="dot-green"></div>
+            <div class="val">…DFfe</div>
+          </div>
+          <div class="prof-row" onclick="showScreen('home')">
+            <div class="ico" style="color:var(--gold)">✦</div>
+            <div class="lab">Gemini — semantic search</div>
+            <div class="dot-green"></div>
+            <div class="val">…zHoA</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <div class="prof-card">
+          <div class="prof-row danger"><div class="ico">⎋</div><div class="lab">Sign out</div></div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="text-align:center; font-size:11px; color:var(--faint); padding-bottom:70px; letter-spacing:0.3px;">BLURT 2.0 · BETA</div>
+    </div>
+  </div>
+
+  <!-- tabbar -->
+  <div class="tabbar">
+    <div class="tab active" id="tab-home" onclick="showScreen('home')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Home
+    </div>
+    <div class="tab" id="tab-library" onclick="showScreen('library')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg>Library
+    </div>
+    <div class="tab" id="tab-search" onclick="showScreen('search')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>Search
+    </div>
+  </div>
+
+  <!-- recording sheet -->
+  <div class="overlay" id="backdrop"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <div class="label">Reminder</div>
+    <div class="title">Message ChatGPT in<br>four minutes</div>
+    <div class="time-row"><div class="bell">🔔</div><div class="time">9:45 AM <small>in 4 minutes</small></div></div>
+    <div class="actions">
+      <button class="btn ghost" id="editBtn">Edit</button>
+      <button class="btn primary" id="saveBtn">Remind me</button>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="screen-dot" data-s="login" onclick="showScreen('login')"></div>
+  <div class="screen-dot active" data-s="home" onclick="showScreen('home')"></div>
+  <div class="screen-dot" data-s="library" onclick="showScreen('library')"></div>
+  <div class="screen-dot" data-s="search" onclick="showScreen('search')"></div>
+  <div class="screen-dot" data-s="detail" onclick="showScreen('detail')"></div>
+  <div class="screen-dot" data-s="profile" onclick="showScreen('profile')"></div>
+</div>
+<div class="screen-labels">
+  <span data-s="login" onclick="showScreen('login')">LOGIN</span>
+  <span data-s="home" onclick="showScreen('home')">HOME</span>
+  <span data-s="library" onclick="showScreen('library')">LIBRARY</span>
+  <span data-s="search" onclick="showScreen('search')">SEARCH</span>
+  <span data-s="detail" onclick="showScreen('detail')">DETAIL</span>
+  <span data-s="profile" onclick="showScreen('profile')">PROFILE</span>
+</div>
+
+<div class="caption">Every screen, one design language.<br><b>Tap the mic on Home</b> for the live recording demo.</div>
+
+<script>
+  const micWrap = document.getElementById('micWrap');
+  const wave = document.getElementById('wave');
+  const transcript = document.getElementById('transcript');
+  const chip = document.getElementById('chip');
+  const hint = document.getElementById('hint');
+  const sheet = document.getElementById('sheet');
+  const backdrop = document.getElementById('backdrop');
+  const saveBtn = document.getElementById('saveBtn');
+  const editBtn = document.getElementById('editBtn');
+  const TEXT = "remind me to message chatgpt in four minutes";
+  const BAR_COUNT = 34;
+  const bars = [];
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const b = document.createElement('div');
+    b.className = 'bar';
+    wave.appendChild(b);
+    bars.push(b);
+  }
+
+  let levelTimer = null;
+  function animateBars(on) {
+    clearInterval(levelTimer);
+    if (!on) { bars.forEach(b => b.style.height = '8px'); return; }
+    levelTimer = setInterval(() => {
+      const base = 10 + Math.random() * 34;
+      bars.forEach((b, i) => {
+        const waveShape = Math.sin(i * 0.55 + Date.now() / 260) * 12;
+        const h = Math.max(5, Math.min(52, base + waveShape + (Math.random() * 14 - 7)));
+        b.style.height = h + 'px';
+      });
+    }, 105);
+  }
+
+  function typeText(text, onDone) {
+    transcript.classList.add('on');
+    let i = 0;
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    const tick = setInterval(() => {
+      transcript.textContent = text.slice(0, ++i);
+      transcript.appendChild(cursor);
+      if (i >= text.length) { clearInterval(tick); onDone(); }
+    }, 62);
+  }
+
+  let running = false;
+  function runDemo() {
+    if (running) return;
+    showScreen('home');
+    running = true;
+    hint.classList.add('hidden');
+    sheet.classList.remove('on');
+    backdrop.classList.remove('on');
+    transcript.classList.remove('on');
+    chip.classList.remove('on');
+    transcript.textContent = '';
+
+    setTimeout(() => { micWrap.classList.add('recording'); animateBars(true); }, 150);
+    setTimeout(() => {
+      wave.classList.add('on');
+      typeText(TEXT, () => setTimeout(() => animateBars(false), 400));
+    }, 620);
+    setTimeout(() => { chip.classList.add('on'); wave.classList.remove('on'); }, 4300);
+    setTimeout(() => {
+      micWrap.classList.remove('recording');
+      transcript.textContent = 'Message ChatGPT';
+      transcript.classList.remove('on');
+      chip.classList.remove('on');
+      backdrop.classList.add('on');
+      sheet.classList.add('on');
+    }, 5400);
+    setTimeout(() => { running = false; hint.classList.remove('hidden'); }, 8000);
+  }
+
+  micWrap.addEventListener('click', runDemo);
+  saveBtn.addEventListener('click', () => { sheet.classList.remove('on'); backdrop.classList.remove('on'); running = false; setTimeout(() => hint.classList.remove('hidden'), 300); });
+  editBtn.addEventListener('click', () => { sheet.classList.remove('on'); backdrop.classList.remove('on'); transcript.classList.add('on'); transcript.textContent = 'Message ChatGPT'; running = false; setTimeout(() => hint.classList.remove('hidden'), 300); });
+
+  // --- navigation ---
+  const screenIds = ['login', 'home', 'library', 'search', 'detail', 'profile'];
+  const tabBar = document.querySelector('.tabbar');
+  function showScreen(id) {
+    // The tab bar belongs only to the three tabbed screens — never login,
+    // detail, or profile.
+    tabBar.style.display = ['home', 'library', 'search'].includes(id) ? 'flex' : 'none';
+    if (id === 'login') { stopRecording(); }
+    if (id !== 'home') stopRecording();
+    screenIds.forEach(s => document.getElementById(s).classList.toggle('active', s === id));
+    document.querySelectorAll('.screen-dot, .screen-labels span').forEach(el => {
+      el.classList.toggle('active', el.dataset.s === id);
+    });
+    const tabs = { home: 'tab-home', library: 'tab-library', search: 'tab-search' };
+    Object.entries(tabs).forEach(([sid, tid]) => {
+      document.getElementById(tid).classList.toggle('active', sid === id);
+    });
+  }
+  function goHome() { showScreen('home'); }
+
+  function stopRecording() {
+    micWrap.classList.remove('recording');
+    animateBars(false);
+    wave.classList.remove('on');
+    transcript.classList.remove('on');
+    chip.classList.remove('on');
+    hint.classList.remove('hidden');
+    clearTimeout(window.__demo);
+    running = false;
+  }
+
+  // small nicety: time ticks
+  setInterval(() => {
+    const d = new Date();
+    document.getElementById('statusTime').textContent =
+      (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0');
+  }, 20000);
+</script>
+</body>
+</html>

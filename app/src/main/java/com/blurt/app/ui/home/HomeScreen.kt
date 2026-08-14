@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -52,7 +55,9 @@ import com.blurt.app.ui.components.AccountMenu
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.CaptureListItem
 import com.blurt.app.ui.components.EmptyState
+import com.blurt.app.ui.components.LocalBlurtListState
 import com.blurt.app.ui.components.blurtPressScale
+import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.theme.BlurtDuration
 import com.blurt.app.ui.theme.BlurtSpacing
@@ -83,7 +88,7 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = BlurtSpacing.xl),
+            .padding(horizontal = BlurtSpacing.grouped),
     ) {
         Spacer(Modifier.height(BlurtSpacing.m))
         HomeHeader(user = user, themeMode = themeMode, onThemeChange = onThemeChange, onSignOut = onSignOut, onSearch = onSearch)
@@ -100,37 +105,49 @@ fun HomeScreen(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Recent Blurts",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    text = "RECENT BLURTS",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onOpenLibrary) {
                     Text(
                         text = "See all",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
             Spacer(Modifier.height(10.dp))
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            // The iOS grouped card — one rounded surface holding every recent
+            // blurt, clipped so only the first row's corners show.
+            Surface(
+                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.m),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                itemsIndexed(captures, key = { _, capture -> capture.id }) { index, capture ->
-                    AnimatedVisibility(
-                        visible = entered,
-                        enter = fadeIn(tween(BlurtDuration.medium, delayMillis = index * 55)) +
-                            slideInVertically(tween(BlurtDuration.medium, delayMillis = index * 55)) { it / 4 },
-                        modifier = Modifier.animateItem(),
-                    ) {
-                        CaptureListItem(
-                            capture = capture,
-                            onClick = { onOpenCapture(capture.id) },
-                            onDelete = viewModel::delete,
-                            onArchive = { id, _ -> viewModel.archive(id) },
-                        )
+                LazyColumn(
+                    state = LocalBlurtListState.current ?: rememberLazyListState(),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    itemsIndexed(captures, key = { _, capture -> capture.id }) { index, capture ->
+                        AnimatedVisibility(
+                            visible = entered,
+                            enter = fadeIn(tween(BlurtDuration.medium, delayMillis = index * 55)) +
+                                slideInVertically(tween(BlurtDuration.medium, delayMillis = index * 55)) { it / 4 },
+                            modifier = Modifier.animateItem(),
+                        ) {
+                            CaptureListItem(
+                                capture = capture,
+                                onClick = { onOpenCapture(capture.id) },
+                                onDelete = viewModel::delete,
+                                onArchive = { id, _ -> viewModel.archive(id) },
+                                showDivider = index > 0,
+                            )
+                        }
                     }
                 }
             }
@@ -184,6 +201,7 @@ private fun HomeHeader(
 @Composable
 private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
     val interactionSource = rememberBlurtInteractionSource()
+    val haptics = rememberBlurtHaptics()
     val infinite = rememberInfiniteTransition(label = "homeMic")
     val ringAlpha by infinite.animateFloat(
         initialValue = 0.08f,
@@ -206,20 +224,27 @@ private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(contentAlignment = Alignment.Center) {
+                // A soft breathing halo in the accent — barely-there motion,
+                // the iOS "record" cue.
                 Box(
                     modifier = Modifier
                         .size(168.dp)
                         .scale(ringScale)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha * 0.5f)),
                 )
+                // A solid system-blue circle with a white mic — the primary
+                // action of the whole product, like Voice Memos' record.
                 Surface(
-                    onClick = onVoice,
+                    onClick = {
+                        haptics.tick()
+                        onVoice()
+                    },
                     interactionSource = interactionSource,
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .size(124.dp)
+                        .size(112.dp)
                         .blurtPressScale(interactionSource),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -227,7 +252,7 @@ private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
                             imageVector = BlurtIcons.Mic,
                             contentDescription = "Speak a blurt",
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier.size(44.dp),
                         )
                     }
                 }
@@ -235,7 +260,7 @@ private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
             Spacer(Modifier.height(26.dp))
             Text(
                 text = "What's on your mind?",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,

@@ -195,7 +195,7 @@ fun AccountMenu(
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "AI & Groq",
+                    text = "AI keys",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -222,14 +222,14 @@ fun AccountMenu(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = "Sign out",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         }
@@ -263,7 +263,7 @@ private fun AiKeyDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(BlurtRadii.l),
+            shape = RoundedCornerShape(BlurtRadii.xl),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier.fillMaxWidth(),

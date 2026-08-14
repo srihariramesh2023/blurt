@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -195,7 +196,7 @@ fun DetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.xl),
             title = { Text("Delete this blurt?") },
             text = {
                 Text(
@@ -266,26 +267,27 @@ private fun DetailContent(
                 Spacer(Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
                     Text(
                         text = intent.label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
             }
             capture.category?.let { category ->
                 Spacer(Modifier.width(8.dp))
+                // The category chip — blue meaning/signal role.
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
                     Text(
                         text = category.label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
@@ -307,24 +309,59 @@ private fun DetailContent(
             )
         }
         capture.reminderAt?.let { reminderAt ->
-            Spacer(Modifier.height(10.dp))
-            if (capture.completedAt != null) {
-                Text(
-                    text = "Done · ${TimeFormat.full(capture.completedAt!!.toEpochMilli())}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = "Reminder was · ${TimeFormat.full(reminderAt.toEpochMilli())}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Text(
-                    text = "Reminder · ${TimeFormat.full(reminderAt.toEpochMilli())}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Spacer(Modifier.height(14.dp))
+            // The reminder card — flat surface + hairline, bell in a blue-soft tile.
+            Surface(
+                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.m),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Bell,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        if (capture.completedAt != null) {
+                            Text(
+                                text = "Done · ${TimeFormat.full(capture.completedAt!!.toEpochMilli())}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "Reminder was · ${TimeFormat.full(reminderAt.toEpochMilli())}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                text = "Reminder",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = TimeFormat.full(reminderAt.toEpochMilli()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -369,7 +406,7 @@ private fun DetailContent(
                     .fillMaxWidth()
                     .height(52.dp)
                     .blurtPressScale(saveSource),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -399,7 +436,7 @@ private fun DetailContent(
                         },
                         interactionSource = linkSource,
                         modifier = Modifier.blurtPressScale(linkSource),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -419,7 +456,7 @@ private fun DetailContent(
                     Text(
                         text = capture.content,
                         style = if (capture.content.length <= 60) {
-                            MaterialTheme.typography.titleLarge
+                            MaterialTheme.typography.headlineMedium
                         } else {
                             MaterialTheme.typography.bodyLarge
                         },
