@@ -116,4 +116,14 @@ class GeminiCaptureAnalyzerTest {
         )
         assertNull(GeminiCaptureAnalyzer.parseAnalysis(raw))
     }
+
+    @Test
+    fun noKeyMeansNoAnalysisWithoutAnyNetworkCall() = kotlinx.coroutines.test.runTest {
+        val analyzer = GeminiCaptureAnalyzer(
+            apiKeyProvider = { null },
+            packageName = "com.blurt.app",
+            certSha1 = "",
+        )
+        assertNull(analyzer.analyze("buy milk", 0L))
+    }
 }

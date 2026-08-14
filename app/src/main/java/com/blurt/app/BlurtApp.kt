@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.room.Room
+import com.blurt.app.ai.AiKeyStore
 import com.blurt.app.ai.CategoryBackfiller
 import com.blurt.app.ai.CaptureAnalyzer
 import com.blurt.app.ai.FallbackCaptureAnalyzer
@@ -36,7 +37,8 @@ class BlurtApp : Application() {
         android.util.Log.d(
             "BlurtAi",
             "captureAnalyzer=${container.captureAnalyzer?.javaClass?.simpleName} " +
-                "groq=${BuildConfig.GROQ_API_KEY.isNotBlank()} gemini=${BuildConfig.GEMINI_API_KEY.isNotBlank()}",
+                "groq=${container.aiKeyStore.groqKey() != null} " +
+                "gemini=${container.aiKeyStore.geminiKey() != null}",
         )
     }
 }
@@ -77,57 +79,50 @@ class AppContainer(context: Context) {
     val reminderScheduler = ReminderScheduler(context)
 
     /**
-     * Capture analysis (intent + category + time extraction). Groq is the
-     * preferred provider when a key was supplied at build time (bigger free
-     * daily quota, faster inference for the voice flow); Gemini is the
-     * fallback when Groq is missing or fails. With no key at all this is null
-     * and saving falls back to the rule-based Link detection with no
-     * classification — the app stays fully usable offline or unconfigured.
+     * Encrypted storage for user-supplied AI keys (BYOK) — a Groq key for
+     * classification and a Gemini key for the classification fallback plus
+     * semantic-search embeddings. Keys are kept in the Android Keystore; the
+     * analyzers resolve them at call time, so a key pasted in the avatar menu
+     * takes effect immediately.
+     */
+    val aiKeyStore = AiKeyStore(context)
+
+    /**
+     * Capture analysis (intent + category + time extraction). Both analyzers
+     * resolve the user's BYOK key from the encrypted store at call time — with
+     * no key pasted, each returns null instantly and the save falls back to
+     * unclassified. Groq is preferred; Gemini is the fallback.
      */
     val captureAnalyzer: CaptureAnalyzer? = buildCaptureAnalyzer(context)
 
     private fun buildCaptureAnalyzer(context: Context): CaptureAnalyzer? {
-        val gemini = if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-            GeminiCaptureAnalyzer(
-                apiKey = BuildConfig.GEMINI_API_KEY,
-                packageName = context.packageName,
-                certSha1 = signingCertSha1(context),
-            )
-        } else {
-            null
-        }
-        val groq = if (BuildConfig.GROQ_API_KEY.isNotBlank()) {
-            GroqCaptureAnalyzer(
-                apiKey = BuildConfig.GROQ_API_KEY,
-                model = BuildConfig.GROQ_MODEL,
-            )
-        } else {
-            null
-        }
-        return when {
-            groq != null && gemini != null -> FallbackCaptureAnalyzer(groq, gemini)
-            groq != null -> groq
-            gemini != null -> gemini
-            else -> null
-        }
+        val groq = GroqCaptureAnalyzer(
+            apiKeyProvider = { aiKeyStore.groqKey() },
+            model = GroqCaptureAnalyzer.DEFAULT_MODEL,
+        )
+        val gemini = GeminiCaptureAnalyzer(
+            apiKeyProvider = { aiKeyStore.geminiKey() },
+            packageName = context.packageName,
+            certSha1 = signingCertSha1(context),
+        )
+        return FallbackCaptureAnalyzer(groq, gemini)
     }
 
-    // Semantic search is enabled only when a Gemini API key was supplied at
-    // build time (local.properties gemini.apiKey / GEMINI_API_KEY env). With
-    // no key, the engine is null and search falls back to plain keywords.
-    val semanticSearch: SemanticSearchEngine? = if (BuildConfig.GEMINI_API_KEY.isNotBlank()) {
-        SemanticSearchEngine(
-            dao = database.captureDao(),
-            embeddingDao = database.embeddingDao(),
-            provider = GeminiEmbeddingProvider(
-                apiKey = BuildConfig.GEMINI_API_KEY,
-                packageName = context.packageName,
-                certSha1 = signingCertSha1(context),
-            ),
-        )
-    } else {
-        null
-    }
+    /**
+     * Semantic search, always constructed. The embedding provider resolves the
+     * user's Gemini BYOK key at call time — a pasted key activates
+     * meaning-based search with no rebuild; with no key, every call degrades
+     * to keyword search.
+     */
+    val semanticSearch: SemanticSearchEngine? = SemanticSearchEngine(
+        dao = database.captureDao(),
+        embeddingDao = database.embeddingDao(),
+        provider = GeminiEmbeddingProvider(
+            apiKeyProvider = { aiKeyStore.geminiKey() },
+            packageName = context.packageName,
+            certSha1 = signingCertSha1(context),
+        ),
+    )
 
     private val captureRemote = RtdbCaptureRemote(context)
 
@@ -153,7 +148,7 @@ class AppContainer(context: Context) {
      * hex, the format Google's Android-app key restrictions expect). Derived
      * at runtime so the header always matches the real signer.
      */
-    private fun signingCertSha1(context: Context): String = runCatching {
+    internal fun signingCertSha1(context: Context): String = runCatching {
         val info = context.packageManager.getPackageInfo(
             context.packageName,
             PackageManager.GET_SIGNING_CERTIFICATES,

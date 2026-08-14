@@ -22,7 +22,12 @@ import org.json.JSONObject
  * list and an ISO-8601 timestamp (or null).
  */
 class GeminiCaptureAnalyzer(
-    private val apiKey: String,
+    /**
+     * Resolves the API key at call time (never at construction), so a key the
+     * user pastes in the app takes effect on the very next analysis without
+     * rebuilding the container. Returning null skips the call entirely.
+     */
+    private val apiKeyProvider: () -> String?,
     private val packageName: String,
     private val certSha1: String,
 ) : CaptureAnalyzer {
@@ -30,15 +35,17 @@ class GeminiCaptureAnalyzer(
     override suspend fun analyze(content: String, nowEpochMillis: Long): CaptureAnalysis? =
         withContext(Dispatchers.IO) {
             if (content.isBlank()) return@withContext null
+            val apiKey = apiKeyProvider() ?: return@withContext null
             try {
-                val raw = post(content, nowEpochMillis)
+                val raw = post(content, nowEpochMillis, apiKey)
                 parseAnalysis(raw)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "analyze failed: ${e::class.simpleName}: ${e.message}")
                 null
             }
         }
 
-    private fun post(content: String, nowEpochMillis: Long): String {
+    private fun post(content: String, nowEpochMillis: Long, apiKey: String): String {
         val now = OffsetDateTime.ofInstant(java.time.Instant.ofEpochMilli(nowEpochMillis), ZoneId.systemDefault())
         val categories = CaptureCategory.entries.joinToString(", ") { it.name }
         val intents = CaptureIntent.entries.joinToString(", ") { it.name }
@@ -132,6 +139,7 @@ class GeminiCaptureAnalyzer(
     }
 
     companion object {
+        private const val TAG = "BlurtGemini"
         const val MODEL = "gemini-3.5-flash"
         private const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 

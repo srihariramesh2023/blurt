@@ -58,4 +58,10 @@ class GroqCaptureAnalyzerTest {
         val raw = chatCompletionResponse("   ")
         assertNull(GroqCaptureAnalyzer.extractContent(raw))
     }
+
+    @Test
+    fun noKeyMeansNoAnalysisWithoutAnyNetworkCall() = kotlinx.coroutines.test.runTest {
+        val analyzer = GroqCaptureAnalyzer(apiKeyProvider = { null }, model = "test-model")
+        assertNull(analyzer.analyze("buy milk", 0L))
+    }
 }

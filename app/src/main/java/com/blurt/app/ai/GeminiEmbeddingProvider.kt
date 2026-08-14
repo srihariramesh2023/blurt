@@ -18,18 +18,25 @@ import org.json.JSONObject
  * January 2026.
  */
 class GeminiEmbeddingProvider(
-    private val apiKey: String,
+    /**
+     * Resolves the API key at call time (never at construction), so a key the
+     * user pastes in the app activates semantic search on the very next query
+     * without rebuilding the container. Returning null makes every call fall
+     * back to keyword search.
+     */
+    private val apiKeyProvider: () -> String?,
     private val packageName: String,
     private val certSha1: String,
 ) : EmbeddingProvider {
 
     override suspend fun embed(texts: List<String>): List<FloatArray>? = withContext(Dispatchers.IO) {
         if (texts.isEmpty()) return@withContext emptyList()
+        val apiKey = apiKeyProvider() ?: return@withContext null
         try {
             val vectors = mutableListOf<FloatArray>()
             // batchEmbedContents accepts up to 100 requests per call.
             texts.chunked(BATCH_SIZE).forEach { chunk ->
-                vectors += postBatch(chunk, taskType = "RETRIEVAL_DOCUMENT")
+                vectors += postBatch(chunk, taskType = "RETRIEVAL_DOCUMENT", apiKey)
             }
             vectors
         } catch (_: Exception) {
@@ -39,14 +46,15 @@ class GeminiEmbeddingProvider(
 
     /** One vector for the query text, embedded with the query task type. */
     suspend fun embedQuery(text: String): FloatArray? = withContext(Dispatchers.IO) {
+        val apiKey = apiKeyProvider() ?: return@withContext null
         try {
-            postBatch(listOf(text), taskType = "RETRIEVAL_QUERY").firstOrNull()
+            postBatch(listOf(text), taskType = "RETRIEVAL_QUERY", apiKey).firstOrNull()
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun postBatch(texts: List<String>, taskType: String): List<FloatArray> {
+    private fun postBatch(texts: List<String>, taskType: String, apiKey: String): List<FloatArray> {
         val body = JSONObject()
             .put(
                 "requests",

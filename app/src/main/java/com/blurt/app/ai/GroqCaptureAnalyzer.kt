@@ -19,15 +19,21 @@ import org.json.JSONObject
  * providers produce identical behavior.
  */
 class GroqCaptureAnalyzer(
-    private val apiKey: String,
+    /**
+     * Resolves the API key at call time (never at construction), so a key the
+     * user pastes in the app takes effect on the very next analysis without
+     * rebuilding the container. Returning null skips the call entirely.
+     */
+    private val apiKeyProvider: () -> String?,
     private val model: String,
 ) : CaptureAnalyzer {
 
     override suspend fun analyze(content: String, nowEpochMillis: Long): CaptureAnalysis? =
         withContext(Dispatchers.IO) {
             if (content.isBlank()) return@withContext null
+            val apiKey = apiKeyProvider() ?: return@withContext null
             try {
-                val raw = post(content, nowEpochMillis)
+                val raw = post(content, nowEpochMillis, apiKey)
                 val jsonText = extractContent(raw) ?: return@withContext null
                 CaptureAnalysisParser.parse(jsonText)
             } catch (e: Exception) {
@@ -36,7 +42,7 @@ class GroqCaptureAnalyzer(
             }
         }
 
-    private fun post(content: String, nowEpochMillis: Long): String {
+    private fun post(content: String, nowEpochMillis: Long, apiKey: String): String {
         val prompt = AnalysisPrompt.build(content, nowEpochMillis)
 
         val body = JSONObject()

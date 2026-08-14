@@ -57,35 +57,9 @@ val ksKeyPassword = signingProperty("keyPassword", "KEY_PASSWORD")
 val hasReleaseSigning = keystoreFile != null && keystoreFile.exists() &&
     ksStorePassword != null && ksKeyAlias != null && ksKeyPassword != null
 
-// --- AI keys (Gemini free tier + optional Groq) ------------------------------
-// API keys are supplied at build time from local.properties (gemini.apiKey /
-// groq.apiKey), a gradle property, or the matching environment variable —
-// never from the repo. A blank key simply disables that provider; the app
-// falls back (Groq → Gemini → unclassified), so the project always builds.
-val localProperties = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val geminiApiKeyRaw = localProperties.getProperty("gemini.apiKey")
-    ?: keystoreProperties.getProperty("gemini.apiKey")
-    ?: (project.findProperty("GEMINI_API_KEY") as String?)
-    ?: System.getenv("GEMINI_API_KEY")
-val geminiApiKey = (geminiApiKeyRaw ?: "").trim()
-
-// Groq is the preferred capture-analysis provider when a key is present
-// (bigger free daily quota, faster inference). The model is overridable via
-// groq.model in local.properties; it defaults to the 70B versatile model.
-val groqApiKeyRaw = localProperties.getProperty("groq.apiKey")
-    ?: (project.findProperty("GROQ_API_KEY") as String?)
-    ?: System.getenv("GROQ_API_KEY")
-val groqApiKey = (groqApiKeyRaw ?: "").trim()
-// Must match GroqCaptureAnalyzer.DEFAULT_MODEL — keep the two in sync.
-val groqModel = (localProperties.getProperty("groq.model")?.trim()
-    ?: "llama-3.3-70b-versatile").kotlinLiteral()
-
-fun String.kotlinLiteral(): String =
-    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
+// AI keys: Blurt ships zero build-time keys. Users bring their own free keys
+// in-app (avatar → AI keys → BYOK), stored encrypted in the Android Keystore —
+// so the APK never contains a secret and the project always builds keyless.
 android {
     namespace = "com.blurt.app"
     compileSdk = 35
@@ -96,9 +70,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "GEMINI_API_KEY", geminiApiKey.kotlinLiteral())
-        buildConfigField("String", "GROQ_API_KEY", groqApiKey.kotlinLiteral())
-        buildConfigField("String", "GROQ_MODEL", groqModel)
     }
 
     signingConfigs {
@@ -136,7 +107,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     testOptions {

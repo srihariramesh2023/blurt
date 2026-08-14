@@ -145,6 +145,33 @@ object BlurtIcons {
         )
     }
 
+    /** Key — the BYOK / AI provider entry in the account menu. */
+    val Key: ImageVector by lazy {
+        icon(
+            name = "Key",
+            pathData = "M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4h-10.35zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
+        )
+    }
+
+    /** Bolt — Groq, the fast classification provider. */
+    val Bolt: ImageVector by lazy {
+        icon(
+            name = "Bolt",
+            pathData = "M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 " +
+                "10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z",
+        )
+    }
+
+    /** Sparkle — Gemini, the fallback classifier + embedding provider. */
+    val Sparkle: ImageVector by lazy {
+        icon(
+            name = "Sparkle",
+            pathData = "M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9z " +
+                "M11.5 4.5L9 9 4.5 11.5 9 14l2.5 4.5L14 14l4.5-2.5L14 9l-2.5-4.5z " +
+                "M19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z",
+        )
+    }
+
     /** Check — save confirmation. */
     val Check: ImageVector by lazy {
         icon(

@@ -151,48 +151,55 @@ devices back into the local database. Deletes are tombstoned (`deleted: true`)
 so they propagate; conflicts resolve last-write-wins by `updatedAt`, with an
 un-uploaded local edit always winning.
 
-### 4. Semantic search — enable the free Gemini tier
+### 4. Semantic search — bring your own Gemini key
 
-Search is **meaning-based** when a Gemini API key is supplied at build time:
-blurts are embedded once and ranked by similarity, so "trip to the beach"
-finds a note that says "vacation in Goa" even though no word matches. Without
-a key — or when offline or rate-limited — search transparently falls back to
-plain keyword matching, so search never breaks.
+Search is **meaning-based** when a Gemini key is active: blurts are embedded
+once and ranked by similarity, so "trip to the beach" finds a note that says
+"vacation in Goa" even though no word matches. Without a key — or when
+offline or rate-limited — search transparently falls back to plain keyword
+matching, so search never breaks.
 
-- [ ] Create a **free** API key at <https://aistudio.google.com/apikey>
-- [ ] Add it to your gitignored `local.properties` (project root):
-      ```properties
-      gemini.apiKey=AIza…
-      ```
-      (or export `GEMINI_API_KEY` in the build environment)
-- [ ] Rebuild: `./gradlew assembleDebug`
+- [ ] Create a **free** API key at <https://aistudio.google.com/apikey> (no
+      credit card)
+- [ ] In the app: **avatar → AI keys → Gemini — semantic search → Save & Check**
 
 How it works: on the first search, every capture is embedded (batched, 100 per
 call) with `gemini-embedding-001` and cached locally in Room — new or edited
 blurts are embedded lazily on demand. Vectors are scoped to the signed-in
-user, live in the app database, and are dropped on sign-out. The key is
-embedded in the APK (it's a free-tier, rate-limited key) — restrict it to your
-app's package and SHA-1 in Google Cloud if you distribute widely.
+user, live in the app database, and are dropped on sign-out. The key is stored
+**encrypted in the Android Keystore** and never leaves the device — the APK
+ships zero secrets. (Optionally restrict the key to this app's package and
+SHA-1 in Google Cloud for an extra layer of safety.)
 
-### 4a. Capture analysis — preferred provider (Groq) — optional
+### 4a. Capture analysis — preferred provider (Groq)
 
-Classification (intent + category + time extraction) runs on **Gemini** by
-default. To prefer **Groq** — a much larger free daily quota (~14,400 requests)
-and faster responses, which makes the voice flow feel snappier — add a free
-key from <https://console.groq.com> (no credit card) to your gitignored
-`local.properties`:
+Classification (intent + category + time extraction) prefers **Groq** — a much
+larger free daily quota (~14,400 requests) and faster responses, which makes
+the voice flow feel snappier. Paste a free key from <https://console.groq.com>
+(no credit card) in **avatar → AI keys → Groq — classification → Save & Check**.
 
-```properties
-# Optional — preferred capture-analysis provider when set
-groq.apiKey=gsk_…
-# Optional — defaults to llama-3.3-70b-versatile
-groq.model=llama-3.3-70b-versatile
-```
+Groq is the primary analyzer; **Gemini** is the automatic fallback (a Groq
+outage or rate limit silently rolls to Gemini, and vice versa). With neither
+key active, blurts save unclassified — nothing breaks. Semantic-search
+embeddings always stay on Gemini — Groq has no embedding models.
 
-When a Groq key is present it becomes the primary analyzer and Gemini is the
-automatic fallback (a Groq outage or rate limit silently rolls to Gemini, and
-vice versa). Semantic-search embeddings always stay on Gemini — Groq has no
-embedding models, and embeddings are the cheap, low-quota part anyway.
+### 4b. Bring your own key (BYOK) — the only key path
+
+Blurt ships **zero keys**: there is no build-time key plumbing at all, so a
+distributed APK contains no secret. Until a user brings their own keys in the
+app, blurts save unclassified and search falls back to keywords:
+
+- Tap the **avatar** (Home, top right) → **AI keys**.
+- **Groq — classification**: paste a free key from <https://console.groq.com>
+  and tap **Save & Check** — the app probes the provider live and shows
+  *Connected*, *rejected*, or *unreachable*.
+- **Gemini — semantic search**: paste a free key from
+  <https://aistudio.google.com/apikey> to activate the Gemini classification
+  fallback **and** meaning-based search.
+- Both keys are stored **encrypted in the Android Keystore** (AES-256-GCM,
+  never leave the device) and take effect on the next analysis — no rebuild
+  or restart needed. The **Remove** button clears a key from the device and
+  restores the unclassified/keyword-search behavior.
 
 ### 5. AI capture — categories and reminders
 
