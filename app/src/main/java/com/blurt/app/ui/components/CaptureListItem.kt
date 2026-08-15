@@ -1,6 +1,5 @@
 package com.blurt.app.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -37,19 +37,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.blurt.app.data.model.Capture
+import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.theme.BlurtRadii
 import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.successColor
 import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.urlDomain
 
 /**
- * A single capture row used inside the grouped card on Home, Library and
- * Search — iOS grouped-cell style: a muted tile for the type, the preview
- * and timestamp (typography carries the hierarchy), quiet blue markers for
- * important blurts and scheduled reminders, and an overflow menu. Rows are
- * separated by spacing alone — no dividers (design standard §4); the
- * container card supplies the rounded corners and clipping.
+ * A single capture as the board's individual card (screen 08): a rounded
+ * surface on the canvas, a task radio circle that toggles completion (green
+ * check when done), a quiet type tile for notes, the title and a date/time
+ * line, a bell for scheduled reminders, and an overflow menu.
  */
 @Composable
 fun CaptureListItem(
@@ -57,87 +57,141 @@ fun CaptureListItem(
     onClick: () -> Unit,
     onDelete: (Long) -> Unit,
     onArchive: ((Long, Boolean) -> Unit)? = null,
+    onToggleComplete: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(BlurtRadii.s))
-            .clickable(onClick = onClick)
-            .padding(horizontal = BlurtSpacing.xs, vertical = BlurtSpacing.m),
-        verticalAlignment = Alignment.CenterVertically,
+    val isTask = capture.intent == CaptureIntent.TASK
+    Surface(
+        shape = RoundedCornerShape(BlurtRadii.m),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier.fillMaxWidth(),
     ) {
-        // The tile sits on the grouped background so it reads against the
-        // card — like App Store icon tiles.
-        Box(
+        Row(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.background)
-                .then(
-                    Modifier.border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                ),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = BlurtSpacing.m, vertical = BlurtSpacing.m),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = typeIcon(capture.type),
-                contentDescription = capture.type.label,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = previewText(capture),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(BlurtSpacing.xs))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${capture.type.label} · ${TimeFormat.relative(capture.createdAt.toEpochMilli())}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (capture.isImportant) {
-                    Spacer(Modifier.width(5.dp))
-                    Icon(
-                        imageVector = BlurtIcons.Star,
-                        contentDescription = "Important",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-                if (capture.reminderAt != null && capture.completedAt == null &&
-                    capture.reminderAt.toEpochMilli() > System.currentTimeMillis()
+            if (isTask) {
+                // The task radio — tap to complete, no navigation.
+                TaskCheck(capture = capture, onToggle = onToggleComplete)
+                Spacer(Modifier.width(14.dp))
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.background),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Spacer(Modifier.width(5.dp))
                     Icon(
-                        imageVector = BlurtIcons.Bell,
-                        contentDescription = "Reminder set",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(12.dp),
+                        imageVector = typeIcon(capture.type),
+                        contentDescription = capture.type.label,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                capture.category?.let { category ->
-                    Spacer(Modifier.width(6.dp))
-                    CategoryPill(label = category.label)
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = previewText(capture),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (capture.completedAt != null) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(BlurtSpacing.xs))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = subtitle(capture),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (capture.reminderAt != null && capture.completedAt == null &&
+                        capture.reminderAt.toEpochMilli() > System.currentTimeMillis()
+                    ) {
+                        Spacer(Modifier.width(5.dp))
+                        Icon(
+                            imageVector = BlurtIcons.Bell,
+                            contentDescription = "Reminder set",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                    if (capture.isImportant) {
+                        Spacer(Modifier.width(5.dp))
+                        Icon(
+                            imageVector = BlurtIcons.Star,
+                            contentDescription = "Important",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+                    capture.category?.let { category ->
+                        Spacer(Modifier.width(6.dp))
+                        CategoryPill(label = category.label)
+                    }
                 }
             }
+            OverflowMenu(capture = capture, onDelete = onDelete, onArchive = onArchive)
         }
-        OverflowMenu(capture = capture, onDelete = onDelete, onArchive = onArchive)
     }
 }
 
-/** Small muted topic tag — the AI's category, shown quietly next to the meta. */
+/** The task radio — empty circle, or a green check when done. */
+@Composable
+private fun TaskCheck(capture: Capture, onToggle: ((Long) -> Unit)?) {
+    val done = capture.completedAt != null
+    val source = rememberBlurtInteractionSource()
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = { onToggle?.invoke(capture.id) }, interactionSource = source, indication = null)
+            .blurtPressScale(source),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (done) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(successColor()),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = BlurtIcons.Check,
+                    contentDescription = "Completed",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.background)
+                    .then(
+                        Modifier.border(
+                            width = 1.5.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = CircleShape,
+                        )
+                    ),
+            )
+        }
+    }
+}
+
+/** Small muted topic tag — the AI's category. */
 @Composable
 private fun CategoryPill(label: String) {
     Surface(
@@ -163,7 +217,6 @@ private fun OverflowMenu(
     var confirmDelete by remember { mutableStateOf(false) }
 
     Box {
-        // 44pt minimum touch target — the icon stays small inside it.
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(44.dp)) {
             Icon(
                 imageVector = Icons.Filled.MoreVert,
@@ -236,4 +289,17 @@ private fun OverflowMenu(
 private fun previewText(capture: Capture): String = when {
     capture.type == CaptureType.LINK -> capture.content.urlDomain()
     else -> capture.content
+}
+
+/** The board's subtitle — "Today, 5:00 PM" · "Note · Today" · "Tomorrow". */
+private fun subtitle(capture: Capture): String {
+    val whenDone = if (capture.completedAt != null) {
+        "Done · ${TimeFormat.dayTime(capture.completedAt.toEpochMilli())}"
+    } else {
+        TimeFormat.dayTime(capture.createdAt.toEpochMilli())
+    }
+    return when (capture.intent) {
+        CaptureIntent.TASK, CaptureIntent.REMINDER -> whenDone
+        else -> "${capture.type.label} · ${whenDone}"
+    }
 }

@@ -17,9 +17,27 @@ object TimeFormat {
         DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.getDefault())
     private val today: DateTimeFormatter =
         DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.getDefault())
+    private val dayTime: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
 
     /** Today's date line for the Home header, e.g. "Monday, August 10". */
     fun todayLabel(): String = today.format(LocalDate.now())
+
+    /**
+     * The board's list subtitle: "Today, 5:00 PM", "Tomorrow", "Yesterday",
+     * or "MMM d" for older items.
+     */
+    fun dayTime(epochMillis: Long, now: Long = System.currentTimeMillis()): String {
+        val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        val todayDate = LocalDate.now(ZoneId.systemDefault())
+        val time = dayTime.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
+        return when (date) {
+            todayDate -> "Today, $time"
+            todayDate.minusDays(1) -> "Yesterday, $time"
+            todayDate.plusDays(1) -> "Tomorrow, $time"
+            else -> monthDay.format(date)
+        }
+    }
 
     fun relative(epochMillis: Long, now: Long = System.currentTimeMillis()): String {
         val diff = now - epochMillis

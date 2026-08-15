@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,6 +48,14 @@ class SearchViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    /**
+     * True while a search is actually in flight — the UI shows a quiet
+     * "Searching…" state instead of stale results (semantic search can take
+     * a couple of seconds on the free tier).
+     */
+    private val _searching = MutableStateFlow(false)
+    val searching: StateFlow<Boolean> = _searching.asStateFlow()
+
     /** True when the latest search ran through semantic embeddings. */
     private val _semanticUsed = MutableStateFlow(false)
     val semanticUsed: StateFlow<Boolean> = _semanticUsed.asStateFlow()
@@ -57,17 +66,24 @@ class SearchViewModel(
     ) { query, state -> query to (state as? AuthState.SignedIn)?.user?.uid }
         .flatMapLatest { (query, uid) ->
             when {
-                uid == null -> flowOf(emptyList())
-                query.isBlank() -> flowOf(emptyList())
+                uid == null -> flowOf(emptyList<Capture>()).onStart { _searching.value = false }
+                query.isBlank() -> flowOf(emptyList<Capture>()).onStart { _searching.value = false }
                 else -> flow {
-                    val semantic = semanticSearch?.let {
-                        withTimeoutOrNull(SEARCH_TIMEOUT_MS) { it.search(query, uid) }
+                    _searching.value = true
+                    try {
+                        val semantic = semanticSearch?.let {
+                            withTimeoutOrNull(SEARCH_TIMEOUT_MS) { it.search(query, uid) }
+                        }
+                        _semanticUsed.value = semantic != null
+                        emit(
+                            if (semantic != null) semantic.map { it.toDomain() }
+                            else repository.searchOnce(query.escapeLikePattern(), uid)
+                        )
+                    } finally {
+                        // Only clear if this query is still the current one — a
+                        // newer query's cancellation must not mask its search.
+                        if (_query.value == query) _searching.value = false
                     }
-                    _semanticUsed.value = semantic != null
-                    emit(
-                        if (semantic != null) semantic.map { it.toDomain() }
-                        else repository.searchOnce(query.escapeLikePattern(), uid)
-                    )
                 }
             }
         }

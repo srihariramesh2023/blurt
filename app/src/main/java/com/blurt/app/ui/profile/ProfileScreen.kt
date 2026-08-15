@@ -51,7 +51,8 @@ import com.blurt.app.auth.AuthUser
 import com.blurt.app.ui.components.AiKeyDialog
 import com.blurt.app.ui.components.AiKeyViewModel
 import com.blurt.app.ui.components.BlurtIcons
-import com.blurt.app.ui.components.BlurtTopBar
+import com.blurt.app.ui.components.LocalBlurtScrollState
+import com.blurt.app.ui.components.LocalTabBarInset
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.theme.BlurtRadii
@@ -69,23 +70,25 @@ fun ProfileScreen(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     onSignOut: () -> Unit,
-    onBack: () -> Unit,
     aiKeyViewModel: AiKeyViewModel = viewModel(factory = AiKeyViewModel.Factory),
 ) {
     val context = LocalContext.current
     var showAiDialog by remember { mutableStateOf(false) }
     var infoDialog by remember { mutableStateOf<InfoRow?>(null) }
 
+    // The shell's shared scroll state, so the frosted copy under the tab bar
+    // scrolls in lockstep with the sharp layer.
+    val scrollState = LocalBlurtScrollState.current ?: rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = BlurtSpacing.grouped),
     ) {
-        BlurtTopBar(title = "", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scrollState)
+                .padding(bottom = LocalTabBarInset.current + BlurtSpacing.m),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(BlurtSpacing.l))
@@ -253,7 +256,8 @@ fun ProfileScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(BlurtSpacing.xxl))
+            // Air so the last row clears the floating glass pill.
+            Spacer(Modifier.height(BlurtSpacing.s))
         }
     }
 

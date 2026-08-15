@@ -29,14 +29,17 @@ import kotlinx.coroutines.launch
 
 /** Where the voice flow is right now. */
 enum class VoicePhase {
-    /** The big mic, waiting. */
+    /** The big orb, waiting. */
     IDLE,
 
-    /** Mic is live; the transcript grows as the user speaks. */
+    /** Orb is live; the transcript grows as the user speaks. */
     LISTENING,
 
-    /** Speech finished; Blurt is reading the transcript. */
+    /** Speech finished; Blurt is organizing (the board's checklist). */
     ANALYZING,
+
+    /** The AI failed to classify — Try Again / Save as Note / Type instead. */
+    ERROR,
 
     /** \"Save Blurt / Edit\" — the lightweight confirmation. */
     CONFIRM,
@@ -257,12 +260,70 @@ class VoiceViewModel(
         _transcript.value = text
         _phase.value = VoicePhase.ANALYZING
         viewModelScope.launch {
-            val analysis = runCatching {
+            val result = runCatching {
                 analyzer?.analyze(text, System.currentTimeMillis())
-            }.getOrNull()
-            _analysis.value = analysis
-            _progressive.value = null
-            _phase.value = VoicePhase.CONFIRM
+            }
+            if (analyzer != null && result.isFailure) {
+                // The board's error state — a snag while classifying, with
+                // Try Again / Save as Note as the escape hatches.
+                _analysis.value = null
+                _progressive.value = null
+                _phase.value = VoicePhase.ERROR
+            } else {
+                _analysis.value = result.getOrNull()
+                _progressive.value = null
+                _phase.value = VoicePhase.CONFIRM
+            }
+        }
+    }
+
+    /** The board's error state: \"Try Again\" re-runs classification. */
+    fun retry() {
+        val text = _transcript.value.trim()
+        if (text.isBlank()) return
+        _phase.value = VoicePhase.ANALYZING
+        viewModelScope.launch {
+            val result = runCatching {
+                analyzer?.analyze(text, System.currentTimeMillis())
+            }
+            if (analyzer != null && result.isFailure) {
+                _phase.value = VoicePhase.ERROR
+            } else {
+                _analysis.value = result.getOrNull()
+                _progressive.value = null
+                _phase.value = VoicePhase.CONFIRM
+            }
+        }
+    }
+
+    /** The board's error state: \"Save as Note\" keeps the recording safe. */
+    fun saveAsNote() {
+        val content = _transcript.value.trim()
+        if (content.isBlank()) return
+        val uid = (authState.value as? AuthState.SignedIn)?.user?.uid
+        if (uid == null) {
+            _error.value = "You need to be signed in to save."
+            return
+        }
+        val type = if (content.isHttpUrl()) CaptureType.LINK else CaptureType.TEXT
+        viewModelScope.launch {
+            val id = runCatching {
+                repository.create(
+                    ownerId = uid,
+                    type = type,
+                    content = content,
+                    category = null,
+                    intent = null,
+                    reminderAt = null,
+                    isImportant = false,
+                )
+            }.getOrElse {
+                _error.value = "Couldn't save. Try again."
+                return@launch
+            }
+            _analysis.value = null
+            _phase.value = VoicePhase.SAVED
+            _saved.value = id
         }
     }
 

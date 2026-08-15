@@ -55,7 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -68,8 +69,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.ai.CaptureAnalysis
 import com.blurt.app.ui.components.BlurtIcons
+import com.blurt.app.ui.components.BlurtOrb
 import com.blurt.app.ui.components.BlurtToast
 import com.blurt.app.ui.components.BlurtTopBar
+import com.blurt.app.ui.components.OrbProcessingRing
+import com.blurt.app.ui.components.OrbState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
@@ -82,14 +86,16 @@ import kotlin.math.sin
 /**
  * The V2 capture surface: speak, and Blurt figures out what it means.
  *
- * 1. IDLE — a large mic and \"What's on your mind?\"; typing is the quiet
- *    secondary path.
- * 2. LISTENING — the mic reacts to the voice, the transcript grows live, and
- *    progressive \"looks like…\" chips appear while the user is still talking.
- * 3. ANALYZING — a brief reading pause.
- * 4. CONFIRM — the understood blurt with Save Blurt / Edit. A detected time
- *    is shown inline; saving schedules the priority notification.
- * 5. SAVED — a brief checkmark, then back to Home.
+ * 1. IDLE — the glowing orb and "Tap the orb and just talk"; typing is the
+ *    quiet secondary path.
+ * 2. LISTENING — the orb becomes a live waveform ring, the transcript grows
+ *    in real time, "Tap to stop" with a square stop control.
+ * 3. ANALYZING — "Thinking it through…" with the board's checklist:
+ *    Transcribing ✓ Understanding ✓ Organizing (in progress).
+ * 4. ERROR — the board's "couldn't organize that" state: Try Again,
+ *    Save as Note, or Type instead.
+ * 5. CONFIRM — the understood blurt with Save Blurt / Edit.
+ * 6. SAVED — a brief checkmark, green toast, then back to Home.
  */
 @Composable
 fun VoiceScreen(
@@ -114,7 +120,6 @@ fun VoiceScreen(
     val reduceMotion = rememberReduceMotion()
 
     // Multimodal feedback: visual + haptic + sound at the same instant.
-    // Mic press → tick + start sound; stop → double tick + stop sound.
     val onMicTapped = {
         haptics.tick()
         com.blurt.app.ui.components.BlurtSound.playStart()
@@ -165,8 +170,6 @@ fun VoiceScreen(
         saved?.let {
             haptics.success()
             com.blurt.app.ui.components.BlurtSound.playSave()
-            // The screen shows the green toast over the review; it pops back
-            // to Home when the toast leaves.
             viewModel.onSavedHandled()
         }
     }
@@ -218,12 +221,18 @@ fun VoiceScreen(
                     onStop = onStop,
                     onCancel = viewModel::cancel,
                 )
-                VoicePhase.ANALYZING -> UnderstandingState(
+                VoicePhase.ANALYZING -> ProcessingState(
                     transcript = transcript,
-                    progressive = progressive,
                     onDiscard = { viewModel.cancel() },
                     onShare = { shareTranscript(context, transcript) },
                     onEdit = viewModel::requestEdit,
+                )
+                VoicePhase.ERROR -> ErrorState(
+                    transcript = transcript,
+                    error = error,
+                    onRetry = viewModel::retry,
+                    onSaveAsNote = viewModel::saveAsNote,
+                    onTypeInstead = { viewModel.requestEdit() },
                 )
                 VoicePhase.CONFIRM -> ReviewState(
                     transcript = transcript,
@@ -251,7 +260,7 @@ fun VoiceScreen(
     }
 }
 
-/** The resting state: a large blue mic, nothing else to think about. */
+/** The resting state: the orb, nothing else to think about. */
 @Composable
 private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String?) {
     Column(
@@ -261,15 +270,15 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
     ) {
         Text(
             text = "What's on your mind?",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(BlurtSpacing.s))
         Text(
-            text = "Tap the mic and just say it — Blurt figures out the rest.",
-            style = MaterialTheme.typography.bodySmall,
+            text = "Tap the orb and just talk.",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
@@ -283,13 +292,15 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
-        Spacer(Modifier.height(44.dp))
-        VoiceButton(
-            listening = false,
-            level = 0f,
+        Spacer(Modifier.height(BlurtSpacing.xl))
+        BlurtOrb(
+            state = OrbState.IDLE,
+            size = 168.dp,
+            icon = BlurtIcons.Mic,
+            contentDescription = "Speak a blurt",
             onClick = onMicTapped,
         )
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(BlurtSpacing.xl))
         val typeSource = rememberBlurtInteractionSource()
         TextButton(
             onClick = onType,
@@ -310,7 +321,11 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
     }
 }
 
-/** Mic live: level-reactive bars, the transcript growing in real time. */
+/**
+ * Listening — the board's screen 06: a circular waveform ring around the
+ * orb, the live transcript, and a "Tap to stop" hint with a square stop
+ * button in a rounded container at the bottom.
+ */
 @Composable
 private fun ListeningState(
     transcript: String,
@@ -325,21 +340,23 @@ private fun ListeningState(
     ) {
         Spacer(Modifier.height(BlurtSpacing.m))
         Text(
-            text = "Listening",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+            text = "Listening…",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Say it — I'm right here.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(32.dp))
-
-        VoiceButton(listening = true, level = level, onClick = onStop)
         Spacer(Modifier.height(BlurtSpacing.xl))
-        VoiceLevelBars(level = level)
+
+        // The waveform ring: bars riding the input level around the orb.
+        Box(contentAlignment = Alignment.Center) {
+            WaveformRing(level = level)
+            BlurtOrb(
+                state = OrbState.RECORDING,
+                size = 168.dp,
+                icon = BlurtIcons.Mic,
+                contentDescription = "Recording",
+            )
+        }
 
         Spacer(Modifier.height(BlurtSpacing.xl))
         AnimatedVisibility(visible = progressive != null && transcript.isNotBlank()) {
@@ -357,45 +374,97 @@ private fun ListeningState(
         )
         Spacer(Modifier.weight(1f))
 
-        Row {
-            val cancelSource = rememberBlurtInteractionSource()
-            TextButton(onClick = onCancel, interactionSource = cancelSource, modifier = Modifier.blurtPressScale(cancelSource)) {
-                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(BlurtSpacing.m))
-            val stopSource = rememberBlurtInteractionSource()
-            Button(
-                onClick = onStop,
-                interactionSource = stopSource,
-                modifier = Modifier.blurtPressScale(stopSource),
-                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) {
+        Text(
+            text = "Tap to stop",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(BlurtSpacing.s))
+        // The square stop button in a rounded container — the board's control.
+        val stopSource = rememberBlurtInteractionSource()
+        Surface(
+            onClick = onStop,
+            interactionSource = stopSource,
+            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .size(64.dp)
+                .blurtPressScale(stopSource),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = BlurtIcons.Stop,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    contentDescription = "Stop recording",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp),
                 )
-                Spacer(Modifier.width(6.dp))
-                Text("Done", style = MaterialTheme.typography.labelLarge)
             }
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
+        val cancelSource = rememberBlurtInteractionSource()
+        TextButton(onClick = onCancel, interactionSource = cancelSource, modifier = Modifier.blurtPressScale(cancelSource)) {
+            Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(24.dp))
     }
 }
 
 /**
- * The understanding moment — Blurt is still reading. The board's "Live AI
- * Analysis" screen: the transcript, the pills it has found so far, a ring
- * that says it's working, and a quiet toolbar (discard / share / edit).
+ * A ring of thin bars around the orb that ride the input level — alive,
+ * never flashy. Bars are fixed-size boxes animating `scaleY` on the
+ * transform layer (anchored to the ring), never layout churn per frame.
  */
 @Composable
-private fun UnderstandingState(
+private fun WaveformRing(level: Float) {
+    val infinite = rememberInfiniteTransition(label = "waveRing")
+    val idle by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1_400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "waveIdle",
+    )
+    val barCount = 24
+    Box(contentAlignment = Alignment.Center) {
+        repeat(barCount) { index ->
+            val angleRad = Math.toRadians(index * (360.0 / barCount))
+            val phase = sin(index * 1.3).toFloat()
+            val raw = if (level > 0.02f) level else 0.22f + 0.14f * idle
+            val scale by animateFloatAsState(
+                targetValue = (0.45f + raw * (0.8f + phase * 0.35f)).coerceIn(0.2f, 1f),
+                animationSpec = BlurtMotion.micro(),
+                label = "bar$index",
+            )
+            // Position the bar at its angle on a 208dp-diameter ring.
+            val radiusPx = with(androidx.compose.ui.platform.LocalDensity.current) { 104.dp.toPx() }
+            val x = (radiusPx * kotlin.math.cos(angleRad)).toFloat() - 1.5f
+            val y = (radiusPx * kotlin.math.sin(angleRad)).toFloat() - 7f
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 14.dp)
+                    .graphicsLayer {
+                        translationX = x
+                        translationY = y
+                        rotationZ = (angleRad / Math.PI * 180).toFloat()
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    }
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        if (index % 2 == 0) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                    ),
+            )
+        }
+    }
+}
+
+/**
+ * Processing — the board's screen 07: "Thinking it through…", the orb with
+ * a swirl ring, and the checklist (Transcribing ✓ Understanding ✓ Organizing).
+ */
+@Composable
+private fun ProcessingState(
     transcript: String,
-    progressive: CaptureAnalysis?,
     onDiscard: () -> Unit,
     onShare: () -> Unit,
     onEdit: () -> Unit,
@@ -406,46 +475,41 @@ private fun UnderstandingState(
     ) {
         Spacer(Modifier.height(BlurtSpacing.l))
         Text(
-            text = "LIVE AI ANALYSIS",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
-            ),
-            color = MaterialTheme.colorScheme.primary,
+            text = "Thinking it through…",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(BlurtSpacing.m))
 
-        // The transcript in a quiet field, like the board's review surface.
-        Surface(
-            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = transcript.ifBlank { "…" },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(BlurtSpacing.m),
+        Box(contentAlignment = Alignment.Center) {
+            OrbProcessingRing(size = 200.dp)
+            BlurtOrb(
+                state = OrbState.PROCESSING,
+                size = 168.dp,
+                icon = BlurtIcons.Sparkle,
+                contentDescription = "Processing",
             )
         }
-        Spacer(Modifier.height(BlurtSpacing.m))
-        progressive?.let { UnderstandingChips(analysis = it, large = true) }
 
-        Spacer(Modifier.weight(1f))
-        CircularProgressIndicator(
-            color = MaterialTheme.colorScheme.primary,
-            strokeWidth = 2.5.dp,
-        )
-        Spacer(Modifier.height(BlurtSpacing.m))
+        Spacer(Modifier.height(BlurtSpacing.xl))
         Text(
-            text = "Understanding…",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
+            text = transcript,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = BlurtSpacing.m),
         )
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(BlurtSpacing.xl))
 
+        // The board's checklist.
+        ProcessingCheckRow(label = "Transcribing", done = true)
+        Spacer(Modifier.height(BlurtSpacing.m))
+        ProcessingCheckRow(label = "Understanding", done = true)
+        Spacer(Modifier.height(BlurtSpacing.m))
+        ProcessingCheckRow(label = "Organizing", done = false)
+
+        Spacer(Modifier.weight(1f))
         // The quiet toolbar: discard / share / edit.
         Row(horizontalArrangement = Arrangement.spacedBy(BlurtSpacing.l)) {
             UnderstandingToolbarButton(BlurtIcons.Trash, "Discard", onDiscard)
@@ -453,6 +517,53 @@ private fun UnderstandingState(
             UnderstandingToolbarButton(BlurtIcons.Keyboard, "Edit", onEdit)
         }
         Spacer(Modifier.height(BlurtSpacing.l))
+    }
+}
+
+@Composable
+private fun ProcessingCheckRow(label: String, done: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = BlurtSpacing.xl),
+    ) {
+        if (done) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = BlurtIcons.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+        } else {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.5.dp,
+            )
+        }
+        Spacer(Modifier.width(BlurtSpacing.m))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (done) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = if (done) "Done" else "Working…",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (done) com.blurt.app.ui.theme.successColor()
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -483,6 +594,107 @@ private fun UnderstandingToolbarButton(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * The board's error state (screen 12): the orb with an exclamation,
+ * "Couldn't organize that", and Try Again / Save as Note / Type instead.
+ */
+@Composable
+private fun ErrorState(
+    transcript: String,
+    error: String?,
+    onRetry: () -> Unit,
+    onSaveAsNote: () -> Unit,
+    onTypeInstead: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            BlurtOrb(
+                state = OrbState.IDLE,
+                size = 140.dp,
+                icon = null,
+                contentDescription = null,
+            )
+            Text(
+                text = "!",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
+        Text(
+            text = "Couldn't organize that",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(BlurtSpacing.s))
+        Text(
+            text = "Your recording is safe, but we couldn't turn it into structured information.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = BlurtSpacing.l),
+        )
+        error?.let {
+            Spacer(Modifier.height(BlurtSpacing.m))
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        }
+        Spacer(Modifier.height(BlurtSpacing.xl))
+        val retrySource = rememberBlurtInteractionSource()
+        Button(
+            onClick = onRetry,
+            interactionSource = retrySource,
+            modifier = Modifier
+                .height(52.dp)
+                .blurtPressScale(retrySource),
+            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Text("Try Again", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(BlurtSpacing.s))
+        val noteSource = rememberBlurtInteractionSource()
+        Button(
+            onClick = onSaveAsNote,
+            interactionSource = noteSource,
+            modifier = Modifier
+                .height(52.dp)
+                .blurtPressScale(noteSource),
+            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
+            Text("Save as Note", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(BlurtSpacing.s))
+        val typeSource = rememberBlurtInteractionSource()
+        TextButton(
+            onClick = onTypeInstead,
+            interactionSource = typeSource,
+            modifier = Modifier.blurtPressScale(typeSource),
+        ) {
+            Text("Type instead", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(BlurtSpacing.l))
     }
 }
 
@@ -530,14 +742,13 @@ private fun ReviewState(
             }
             Text(
                 text = transcript,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(BlurtSpacing.m))
             if (hasReminder && analysis?.reminderAt != null) {
-                // Reminder · in 4 minutes — the pill, then the date line.
                 Text(
                     text = "Reminder · ${TimeFormat.inDuration(analysis.reminderAt)}",
                     style = MaterialTheme.typography.labelLarge,
@@ -583,7 +794,6 @@ private fun ReviewState(
         }
         Spacer(Modifier.height(BlurtSpacing.l))
 
-        // The blue action bar: Save Blurt fills, Edit sits quiet beside it.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -661,108 +871,6 @@ private fun SavedReviewState(
     }
 }
 
-/** The mic itself — calm at rest, breathing ring + level ring while live. */
-@Composable
-private fun VoiceButton(listening: Boolean, level: Float, onClick: () -> Unit) {
-    val interactionSource = rememberBlurtInteractionSource()
-    val infinite = rememberInfiniteTransition(label = "micPulse")
-    val ringAlpha by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(tween(1_600, easing = LinearEasing), RepeatMode.Reverse),
-        label = "ringAlpha",
-    )
-    val ringScale by infinite.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(1_600, easing = LinearEasing), RepeatMode.Reverse),
-        label = "ringScale",
-    )
-
-    Box(contentAlignment = Alignment.Center) {
-        if (listening) {
-            Box(
-                modifier = Modifier
-                    .size(148.dp)
-                    .scale(ringScale)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = ringAlpha)),
-            )
-        }
-        val pressScale by animateFloatAsState(
-            targetValue = if (listening) 1f + level * 0.04f else 1f,
-            animationSpec = BlurtMotion.micro(),
-            label = "micPress",
-        )
-        // A solid system-blue circle with a white glyph — the Voice Memos
-        // record button, tinted to Blurt's blue. No glass, no border, no gold.
-        Surface(
-            onClick = onClick,
-            interactionSource = interactionSource,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .size(112.dp)
-                .scale(pressScale)
-                .blurtPressScale(interactionSource),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (listening) BlurtIcons.Stop else BlurtIcons.Mic,
-                    contentDescription = if (listening) "Stop listening" else "Start listening",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(44.dp),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Seven thin bars that ride the input level — alive, never flashy.
- *
- * The bar is a fixed-size box; the level animates `scaleY` on the
- * transform layer (anchored to the baseline) — never layout churn per
- * frame. Transforming beats relayouting: same motion, compositor-friendly.
- */
-@Composable
-private fun VoiceLevelBars(level: Float) {
-    val infinite = rememberInfiniteTransition(label = "levelIdle")
-    val idle by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1_400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "idle",
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(7) { index ->
-            val phase = sin(index * 1.1).toFloat()
-            val raw = if (level > 0.02f) level else 0.18f + 0.12f * idle
-            val scale by animateFloatAsState(
-                // Same envelope as before, normalized to the fixed 16dp bar:
-                // scale = oldHeight/16 = (0.5 + raw·(0.9 + phase·0.3)) / 2.
-                targetValue = (0.5f + raw * (0.9f + phase * 0.3f)) / 2f,
-                animationSpec = BlurtMotion.micro(),
-                label = "bar$index",
-            )
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(16.dp)
-                    .graphicsLayer {
-                        scaleY = scale
-                        transformOrigin = TransformOrigin(0.5f, 1f)
-                    }
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(
-                        if (index % 2 == 0) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                    ),
-            )
-        }
-    }
-}
-
 /** Quiet chips: intent · category · reminder timing. */
 @Composable
 private fun UnderstandingChips(analysis: CaptureAnalysis, large: Boolean = false) {
@@ -809,3 +917,5 @@ private fun needsNotificationPermission(context: android.content.Context): Boole
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
         PackageManager.PERMISSION_GRANTED
+
+

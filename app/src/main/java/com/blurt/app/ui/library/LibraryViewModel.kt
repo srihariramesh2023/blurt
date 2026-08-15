@@ -21,14 +21,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** The main browse collections — generated automatically, never by hand. */
 enum class LibraryCollection(val label: String) {
     ALL("All"),
-    REMINDERS("Reminders"),
     TASKS("Tasks"),
+    REMINDERS("Reminders"),
+    NOTES("Notes"),
     IDEAS("Ideas"),
     IMPORTANT("Important"),
     ARCHIVED("Archived"),
@@ -41,6 +43,14 @@ class LibraryViewModel(
     private val authState: StateFlow<AuthState>,
 ) : ViewModel() {
 
+    /**
+     * True until the first capture list has actually arrived. The lists start
+     * empty by default, so without this flag the UI flashes the empty state
+     * for a frame before real data lands — the skeleton sits in that gap.
+     */
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     /** Every non-archived capture of the signed-in user, newest first. */
     val allCaptures: StateFlow<List<Capture>> = authState
         .flatMapLatest { state ->
@@ -48,6 +58,7 @@ class LibraryViewModel(
             if (uid == null) flowOf(emptyList())
             else repository.observeAll(uid)
         }
+        .onEach { _isLoading.value = false }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** The archive — browsed separately so it never clutters the main lists. */
@@ -77,9 +88,12 @@ class LibraryViewModel(
             .filter { capture ->
                 when (collection) {
                     LibraryCollection.ALL -> true
+                    LibraryCollection.TASKS -> capture.intent == CaptureIntent.TASK
                     LibraryCollection.REMINDERS -> capture.completedAt == null &&
                         (capture.intent == CaptureIntent.REMINDER || capture.reminderAt != null)
-                    LibraryCollection.TASKS -> capture.intent == CaptureIntent.TASK
+                    LibraryCollection.NOTES ->
+                        capture.intent != CaptureIntent.TASK &&
+                            !(capture.intent == CaptureIntent.REMINDER || capture.reminderAt != null)
                     LibraryCollection.IDEAS ->
                         capture.intent == CaptureIntent.IDEA || capture.category == CaptureCategory.IDEAS
                     LibraryCollection.IMPORTANT -> capture.isImportant
@@ -114,6 +128,15 @@ class LibraryViewModel(
         viewModelScope.launch {
             val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
             repository.setArchived(id, uid, archived)
+        }
+    }
+
+    /** Completes (or reopens) a task — the board's radio-circle check. */
+    fun toggleCompleted(id: Long) {
+        viewModelScope.launch {
+            val uid = (authState.value as? AuthState.SignedIn)?.user?.uid ?: return@launch
+            val capture = allCaptures.value.firstOrNull { it.id == id } ?: return@launch
+            repository.setCompleted(id, uid, capture.completedAt == null)
         }
     }
 

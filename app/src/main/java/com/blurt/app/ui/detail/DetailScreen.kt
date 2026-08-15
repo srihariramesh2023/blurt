@@ -5,7 +5,10 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +31,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,12 +52,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.data.model.Capture
+import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtTopBar
@@ -59,13 +66,18 @@ import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.components.typeIcon
 import com.blurt.app.ui.theme.BlurtMotion
+import com.blurt.app.ui.theme.BlurtRadii
 import com.blurt.app.ui.theme.BlurtSpacing
 import com.blurt.app.ui.theme.rememberReduceMotion
+import com.blurt.app.ui.theme.successColor
 import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.normalizedHttpUrl
 
 /**
- * Detail: full capture with inline edit, delete, and open-in-browser for links.
+ * Detail — the board's screen 09: a task-style card with the checkbox and
+ * due date, a Details section, Created from / Created / Status rows, a
+ * primary "Mark as Complete" action, and a red Delete below. Editing stays
+ * inline; share and archive live in the overflow menu.
  */
 @Composable
 fun DetailScreen(
@@ -81,6 +93,7 @@ fun DetailScreen(
     val context = LocalContext.current
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(deleted) {
         if (deleted) {
@@ -110,90 +123,76 @@ fun DetailScreen(
                         Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    val currentCapture = capture ?: return@BlurtTopBar
-                    if (currentCapture.reminderAt != null) {
-                        val doneSource = rememberBlurtInteractionSource()
-                        IconButton(
-                            onClick = viewModel::toggleCompleted,
-                            interactionSource = doneSource,
-                            modifier = Modifier.blurtPressScale(doneSource),
-                        ) {
-                            Icon(
-                                imageVector = BlurtIcons.Check,
-                                contentDescription = if (currentCapture.completedAt != null) "Reopen" else "Mark done",
-                                tint = if (currentCapture.completedAt != null) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                    // The board's top-right: menu dots with all the actions.
+                    val menuSource = rememberBlurtInteractionSource()
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        interactionSource = menuSource,
+                        modifier = Modifier.blurtPressScale(menuSource),
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Tune,
+                            contentDescription = "More",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(BlurtRadii.m),
+                    ) {
+                        val currentCapture = capture
+                        if (currentCapture != null) {
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Edit, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = { Text("Edit") },
+                                onClick = { menuOpen = false; viewModel.startEditing() },
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (currentCapture.isImportant) BlurtIcons.Star else BlurtIcons.StarOutline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                                text = { Text(if (currentCapture.isImportant) "Unmark Important" else "Mark Important") },
+                                onClick = { menuOpen = false; viewModel.toggleImportant() },
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(BlurtIcons.Share, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = { Text("Share") },
+                                onClick = {
+                                    menuOpen = false
+                                    runCatching {
+                                        val send = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, currentCapture.content)
+                                        }
+                                        context.startActivity(Intent.createChooser(send, "Share blurt"))
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(BlurtIcons.Archive, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = { Text("Archive") },
+                                onClick = { menuOpen = false; viewModel.archive() },
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error)
+                                },
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                onClick = { menuOpen = false; showDeleteDialog = true },
                             )
                         }
-                    }
-                    val starSource = rememberBlurtInteractionSource()
-                    IconButton(
-                        onClick = viewModel::toggleImportant,
-                        interactionSource = starSource,
-                        modifier = Modifier.blurtPressScale(starSource),
-                    ) {
-                        Icon(
-                            imageVector = if (currentCapture.isImportant) BlurtIcons.Star else BlurtIcons.StarOutline,
-                            contentDescription = if (currentCapture.isImportant) "Unmark important" else "Mark important",
-                            tint = if (currentCapture.isImportant) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    val shareSource = rememberBlurtInteractionSource()
-                    IconButton(
-                        onClick = {
-                            runCatching {
-                                val send = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, currentCapture.content)
-                                }
-                                context.startActivity(Intent.createChooser(send, "Share blurt"))
-                            }
-                        },
-                        interactionSource = shareSource,
-                        modifier = Modifier.blurtPressScale(shareSource),
-                    ) {
-                        Icon(
-                            imageVector = BlurtIcons.Share,
-                            contentDescription = "Share",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    val archiveSource = rememberBlurtInteractionSource()
-                    IconButton(
-                        onClick = viewModel::archive,
-                        interactionSource = archiveSource,
-                        modifier = Modifier.blurtPressScale(archiveSource),
-                    ) {
-                        Icon(
-                            imageVector = BlurtIcons.Archive,
-                            contentDescription = "Archive",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    val editSource = rememberBlurtInteractionSource()
-                    IconButton(
-                        onClick = viewModel::startEditing,
-                        interactionSource = editSource,
-                        modifier = Modifier.blurtPressScale(editSource),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Edit",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    val deleteSource = rememberBlurtInteractionSource()
-                    IconButton(
-                        onClick = { showDeleteDialog = true },
-                        interactionSource = deleteSource,
-                        modifier = Modifier.blurtPressScale(deleteSource),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
                     }
                 }
             },
@@ -212,6 +211,8 @@ fun DetailScreen(
                 editError = editError,
                 onEditTextChange = viewModel::onEditTextChange,
                 onSaveEdit = viewModel::saveEdit,
+                onToggleComplete = viewModel::toggleCompleted,
+                onRequestDelete = { showDeleteDialog = true },
             )
         }
     }
@@ -220,7 +221,7 @@ fun DetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.xl),
+            shape = RoundedCornerShape(BlurtRadii.xl),
             title = { Text("Delete this blurt?") },
             text = {
                 Text(
@@ -253,9 +254,12 @@ private fun DetailContent(
     editError: String?,
     onEditTextChange: (String) -> Unit,
     onSaveEdit: () -> Unit,
+    onToggleComplete: () -> Unit,
+    onRequestDelete: () -> Unit,
 ) {
     val context = LocalContext.current
-    val saveSource = rememberBlurtInteractionSource()
+    val isTask = capture.intent == CaptureIntent.TASK || capture.completedAt != null
+    val done = capture.completedAt != null
 
     Column(
         modifier = Modifier
@@ -263,132 +267,89 @@ private fun DetailContent(
             .verticalScroll(rememberScrollState())
             .padding(bottom = BlurtSpacing.xxl),
     ) {
-        Spacer(Modifier.height(BlurtSpacing.s))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+        // The task card — checkbox, title, due line (board screen 09).
+        Surface(
+            shape = RoundedCornerShape(BlurtRadii.m),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(BlurtSpacing.m),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                val checkSource = rememberBlurtInteractionSource()
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleComplete, interactionSource = checkSource, indication = null)
+                        .blurtPressScale(checkSource),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = typeIcon(capture.type),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = capture.type.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            capture.intent?.let { intent ->
-                Spacer(Modifier.width(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Text(
-                        text = intent.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
-                }
-            }
-            capture.category?.let { category ->
-                Spacer(Modifier.width(8.dp))
-                // The category chip — blue meaning/signal role.
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Text(
-                        text = category.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
-                }
-            }
-            if (capture.isImportant) {
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    imageVector = BlurtIcons.Star,
-                    contentDescription = "Important",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = TimeFormat.full(capture.createdAt.toEpochMilli()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        capture.reminderAt?.let { reminderAt ->
-            Spacer(Modifier.height(BlurtSpacing.m))
-            // The reminder card — flat surface + hairline, bell in a blue-soft tile.
-            Surface(
-                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.m),
-                color = MaterialTheme.colorScheme.surface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = BlurtIcons.Bell,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        if (capture.completedAt != null) {
-                            Text(
-                                text = "Done · ${TimeFormat.full(capture.completedAt!!.toEpochMilli())}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = "Reminder was · ${TimeFormat.full(reminderAt.toEpochMilli())}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            Text(
-                                text = "Reminder",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = TimeFormat.full(reminderAt.toEpochMilli()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (done) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(successColor()),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = BlurtIcons.Check,
+                                contentDescription = "Completed",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(15.dp),
                             )
                         }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.background)
+                                .then(
+                                    Modifier.border(
+                                        width = 1.5.dp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        shape = CircleShape,
+                                    )
+                                ),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = capture.content,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (done) MaterialTheme.colorScheme.onSurfaceVariant
+                        else MaterialTheme.colorScheme.onBackground,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (capture.reminderAt != null) BlurtIcons.Bell else BlurtIcons.Quote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = capture.reminderAt?.let {
+                                "Today, ${TimeFormat.dayTime(it.toEpochMilli())}"
+                            } ?: capture.type.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
         }
-        Spacer(Modifier.height(BlurtSpacing.l))
+
+        Spacer(Modifier.height(BlurtSpacing.xl))
 
         if (isEditing) {
             TextField(
@@ -428,6 +389,7 @@ private fun DetailContent(
                 }
             }
             Spacer(Modifier.height(BlurtSpacing.m))
+            val saveSource = rememberBlurtInteractionSource()
             Button(
                 onClick = onSaveEdit,
                 interactionSource = saveSource,
@@ -435,7 +397,7 @@ private fun DetailContent(
                     .fillMaxWidth()
                     .height(52.dp)
                     .blurtPressScale(saveSource),
-                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+                shape = RoundedCornerShape(BlurtRadii.l),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -443,56 +405,211 @@ private fun DetailContent(
             ) {
                 Text("Save changes", style = MaterialTheme.typography.labelLarge)
             }
-        } else {
-            when {
-                capture.type == CaptureType.LINK -> {
-                    Text(
-                        text = capture.content,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
+            return@Column
+        }
+
+        // Details — the body, or the link with its Open action.
+        Text(
+            text = "Details",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
+            ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(BlurtSpacing.s))
+        when {
+            capture.type == CaptureType.LINK -> {
+                Text(
+                    text = capture.content,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(BlurtSpacing.m))
+                val linkSource = rememberBlurtInteractionSource()
+                Button(
+                    onClick = {
+                        val url = capture.content.normalizedHttpUrl()
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        }
+                    },
+                    interactionSource = linkSource,
+                    modifier = Modifier.blurtPressScale(linkSource),
+                    shape = RoundedCornerShape(BlurtRadii.l),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = typeIcon(CaptureType.LINK),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
                     )
-                    Spacer(Modifier.height(BlurtSpacing.m))
-                    val linkSource = rememberBlurtInteractionSource()
-                    Button(
-                        onClick = {
-                            val url = capture.content.normalizedHttpUrl()
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
-                        },
-                        interactionSource = linkSource,
-                        modifier = Modifier.blurtPressScale(linkSource),
-                        shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open link", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
+            capture.content.isNotBlank() -> {
+                Text(
+                    text = capture.content,
+                    style = if (capture.content.length <= 60) {
+                        MaterialTheme.typography.titleLarge
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    },
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
+
+        // The meta rows — Created from / Created / Status.
+        Spacer(Modifier.height(BlurtSpacing.xl))
+        Surface(
+            shape = RoundedCornerShape(BlurtRadii.m),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column {
+                MetaRow(
+                    label = "Created",
+                    value = TimeFormat.full(capture.createdAt.toEpochMilli()),
+                    icon = BlurtIcons.Quote,
+                )
+                if (capture.reminderAt != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = BlurtSpacing.m, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            imageVector = typeIcon(CaptureType.LINK),
+                            imageVector = BlurtIcons.Bell,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp),
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Open link", style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.width(BlurtSpacing.m))
+                        Text(
+                            text = "Reminder",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = if (done) "Done" else TimeFormat.dayTime(capture.reminderAt.toEpochMilli()),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (done) successColor() else MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
-
-                capture.content.isNotBlank() -> {
-                    Text(
-                        text = capture.content,
-                        style = if (capture.content.length <= 60) {
-                            MaterialTheme.typography.headlineMedium
-                        } else {
-                            MaterialTheme.typography.bodyLarge
-                        },
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
+                if (isTask) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = BlurtSpacing.m, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(Modifier.width(BlurtSpacing.m))
+                        Text(
+                            text = "Status",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = if (done) "Completed" else "Pending",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (done) successColor() else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }
+
+        Spacer(Modifier.height(BlurtSpacing.xl))
+
+        // The primary action — Mark as Complete, or Done / Reopen.
+        if (isTask) {
+            val completeSource = rememberBlurtInteractionSource()
+            Button(
+                onClick = onToggleComplete,
+                interactionSource = completeSource,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .blurtPressScale(completeSource),
+                shape = RoundedCornerShape(BlurtRadii.l),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                Text(
+                    text = if (done) "Reopen" else "Mark as Complete",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
+
+        // Delete — the quiet red text action at the bottom (board screen 09).
+        val deleteSource = rememberBlurtInteractionSource()
+        Text(
+            text = "Delete",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(BlurtRadii.s))
+                .clickable(onClick = onRequestDelete, interactionSource = deleteSource, indication = null)
+                .blurtPressScale(deleteSource)
+                .padding(vertical = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun MetaRow(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = BlurtSpacing.m, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(15.dp),
+        )
+        Spacer(Modifier.width(BlurtSpacing.m))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
