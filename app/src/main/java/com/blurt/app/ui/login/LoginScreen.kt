@@ -42,6 +42,9 @@ import com.blurt.app.R
 import com.blurt.app.ui.components.BlurtLogo
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
+import com.blurt.app.ui.theme.BlurtMotion
+import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.rememberReduceMotion
 
 /**
  * The Blurt sign-in screen. Shown whenever there is no authenticated session:
@@ -76,7 +79,7 @@ fun LoginScreen(
             Entrance(tick = entered, delayMs = 0) {
                 BlurtLogo(size = 72.dp)
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(BlurtSpacing.l))
             Entrance(tick = entered, delayMs = 90) {
                 Text(
                     text = "Blurt",
@@ -84,7 +87,7 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(BlurtSpacing.s))
             Entrance(tick = entered, delayMs = 180) {
                 Text(
                     text = "A quiet home for the things on your mind.",
@@ -93,7 +96,7 @@ fun LoginScreen(
                     textAlign = TextAlign.Center,
                 )
             }
-            Spacer(Modifier.height(56.dp))
+            Spacer(Modifier.height(BlurtSpacing.xxxl))
             Entrance(tick = entered, delayMs = 260) {
                 ContinueWithGoogleButton(
                     isSigningIn = isSigningIn,
@@ -104,17 +107,18 @@ fun LoginScreen(
             }
             AnimatedVisibility(
                 visible = error != null,
-                enter = fadeIn(tween(250)),
+                enter = if (rememberReduceMotion()) fadeIn(tween(BlurtMotion.FADE_MS))
+                else fadeIn(BlurtMotion.standard()),
             ) {
                 Text(
                     text = error.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = BlurtSpacing.m),
                 )
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(BlurtSpacing.l))
             Text(
                 text = "Your blurts stay private to your Google account.",
                 style = MaterialTheme.typography.bodySmall,
@@ -192,8 +196,12 @@ private fun Entrance(
 ) {
     AnimatedVisibility(
         visible = tick,
-        enter = fadeIn(tween(420, delayMillis = delayMs)) +
-            slideInVertically(tween(420, delayMillis = delayMs)) { it / 5 },
+        enter = if (rememberReduceMotion()) {
+            fadeIn(tween(BlurtMotion.FADE_MS, delayMillis = delayMs))
+        } else {
+            fadeIn(BlurtMotion.entrance(), initialAlpha = 0f) +
+                slideInVertically(BlurtMotion.entrance(), initialOffsetY = { it / 5 })
+        },
     ) {
         content()
     }

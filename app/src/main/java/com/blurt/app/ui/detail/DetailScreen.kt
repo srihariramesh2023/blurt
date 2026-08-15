@@ -3,7 +3,6 @@ package com.blurt.app.ui.detail
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
@@ -48,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,6 +58,9 @@ import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.components.typeIcon
+import com.blurt.app.ui.theme.BlurtMotion
+import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.rememberReduceMotion
 import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.normalizedHttpUrl
 
@@ -75,6 +78,7 @@ fun DetailScreen(
     val editError by viewModel.editError.collectAsStateWithLifecycle()
     val deleted by viewModel.deleted.collectAsStateWithLifecycle()
     val archived by viewModel.archived.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -95,7 +99,7 @@ fun DetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = BlurtSpacing.grouped),
     ) {
         BlurtTopBar(
             title = "",
@@ -133,6 +137,26 @@ fun DetailScreen(
                             contentDescription = if (currentCapture.isImportant) "Unmark important" else "Mark important",
                             tint = if (currentCapture.isImportant) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val shareSource = rememberBlurtInteractionSource()
+                    IconButton(
+                        onClick = {
+                            runCatching {
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, currentCapture.content)
+                                }
+                                context.startActivity(Intent.createChooser(send, "Share blurt"))
+                            }
+                        },
+                        interactionSource = shareSource,
+                        modifier = Modifier.blurtPressScale(shareSource),
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Share,
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     val archiveSource = rememberBlurtInteractionSource()
@@ -237,9 +261,9 @@ private fun DetailContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 40.dp),
+            .padding(bottom = BlurtSpacing.xxl),
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(BlurtSpacing.s))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -309,7 +333,7 @@ private fun DetailContent(
             )
         }
         capture.reminderAt?.let { reminderAt ->
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(BlurtSpacing.m))
             // The reminder card — flat surface + hairline, bell in a blue-soft tile.
             Surface(
                 shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.m),
@@ -364,7 +388,7 @@ private fun DetailContent(
                 }
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(BlurtSpacing.l))
 
         if (isEditing) {
             TextField(
@@ -387,10 +411,15 @@ private fun DetailContent(
             )
             AnimatedVisibility(
                 visible = editError != null,
-                enter = fadeIn(tween(180)) + expandVertically(tween(180)),
+                enter = if (rememberReduceMotion()) {
+                    fadeIn(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS)) +
+                        expandVertically(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS))
+                } else {
+                    fadeIn(BlurtMotion.micro()) + expandVertically(BlurtMotion.micro())
+                },
             ) {
                 editError?.let {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(BlurtSpacing.s))
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
@@ -398,7 +427,7 @@ private fun DetailContent(
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(BlurtSpacing.m))
             Button(
                 onClick = onSaveEdit,
                 interactionSource = saveSource,
@@ -425,7 +454,7 @@ private fun DetailContent(
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(BlurtSpacing.m))
                     val linkSource = rememberBlurtInteractionSource()
                     Button(
                         onClick = {

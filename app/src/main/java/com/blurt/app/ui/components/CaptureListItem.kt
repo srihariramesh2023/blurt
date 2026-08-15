@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.ui.theme.BlurtRadii
 import com.blurt.app.ui.theme.BlurtSpacing
 import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.urlDomain
@@ -48,8 +48,8 @@ import com.blurt.app.util.urlDomain
  * Search — iOS grouped-cell style: a muted tile for the type, the preview
  * and timestamp (typography carries the hierarchy), quiet blue markers for
  * important blurts and scheduled reminders, and an overflow menu. Rows are
- * separated by inset hairlines aligned to the text; the container card
- * supplies the rounded corners and clipping.
+ * separated by spacing alone — no dividers (design standard §4); the
+ * container card supplies the rounded corners and clipping.
  */
 @Composable
 fun CaptureListItem(
@@ -58,93 +58,82 @@ fun CaptureListItem(
     onDelete: (Long) -> Unit,
     onArchive: ((Long, Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
-    showDivider: Boolean = true,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        if (showDivider) {
-            // iOS inset separator — aligned with the row's text column.
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                thickness = 0.5.dp,
-                modifier = Modifier.padding(start = 56.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(BlurtRadii.s))
+            .clickable(onClick = onClick)
+            .padding(horizontal = BlurtSpacing.xs, vertical = BlurtSpacing.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The tile sits on the grouped background so it reads against the
+        // card — like App Store icon tiles.
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .then(
+                    Modifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = typeIcon(capture.type),
+                contentDescription = capture.type.label,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
             )
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(BlurtSpacing.s))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 4.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // The tile sits on the grouped background so it reads against the
-            // card — like App Store icon tiles.
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.background)
-                    .then(
-                        Modifier.border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = typeIcon(capture.type),
-                    contentDescription = capture.type.label,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = previewText(capture),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(BlurtSpacing.xs))
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = previewText(capture),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    text = "${capture.type.label} · ${TimeFormat.relative(capture.createdAt.toEpochMilli())}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(3.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${capture.type.label} · ${TimeFormat.relative(capture.createdAt.toEpochMilli())}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (capture.isImportant) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(
+                        imageVector = BlurtIcons.Star,
+                        contentDescription = "Important",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp),
                     )
-                    if (capture.isImportant) {
-                        Spacer(Modifier.width(5.dp))
-                        Icon(
-                            imageVector = BlurtIcons.Star,
-                            contentDescription = "Important",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp),
-                        )
-                    }
-                    if (capture.reminderAt != null && capture.completedAt == null &&
-                        capture.reminderAt.toEpochMilli() > System.currentTimeMillis()
-                    ) {
-                        Spacer(Modifier.width(5.dp))
-                        Icon(
-                            imageVector = BlurtIcons.Bell,
-                            contentDescription = "Reminder set",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp),
-                        )
-                    }
-                    capture.category?.let { category ->
-                        Spacer(Modifier.width(6.dp))
-                        CategoryPill(label = category.label)
-                    }
+                }
+                if (capture.reminderAt != null && capture.completedAt == null &&
+                    capture.reminderAt.toEpochMilli() > System.currentTimeMillis()
+                ) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(
+                        imageVector = BlurtIcons.Bell,
+                        contentDescription = "Reminder set",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+                capture.category?.let { category ->
+                    Spacer(Modifier.width(6.dp))
+                    CategoryPill(label = category.label)
                 }
             }
-            OverflowMenu(capture = capture, onDelete = onDelete, onArchive = onArchive)
         }
+        OverflowMenu(capture = capture, onDelete = onDelete, onArchive = onArchive)
     }
 }
 
@@ -174,7 +163,8 @@ private fun OverflowMenu(
     var confirmDelete by remember { mutableStateOf(false) }
 
     Box {
-        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(34.dp)) {
+        // 44pt minimum touch target — the icon stays small inside it.
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(44.dp)) {
             Icon(
                 imageVector = Icons.Filled.MoreVert,
                 contentDescription = "More",
@@ -186,7 +176,7 @@ private fun OverflowMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(BlurtSpacing.m),
+            shape = RoundedCornerShape(BlurtRadii.m),
         ) {
             onArchive?.let { archive ->
                 DropdownMenuItem(
@@ -218,7 +208,7 @@ private fun OverflowMenu(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(BlurtSpacing.xl),
+            shape = RoundedCornerShape(BlurtRadii.xl),
             title = { Text("Delete this blurt?") },
             text = {
                 Text(

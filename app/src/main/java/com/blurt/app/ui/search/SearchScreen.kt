@@ -6,15 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -122,16 +123,15 @@ fun SearchScreen(
                         state = LocalBlurtListState.current ?: rememberLazyListState(),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
-                        itemsIndexed(results, key = { _, it -> it.id }) { index, capture: Capture ->
-                            CaptureListItem(
-                                capture = capture,
-                                onClick = { onOpenCapture(capture.id) },
-                                onDelete = viewModel::delete,
-                                onArchive = { id, _ -> viewModel.archive(id) },
-                                modifier = Modifier.animateItem(),
-                                showDivider = index > 0,
-                            )
-                        }
+                    items(results, key = { it.id }) { capture: Capture ->
+                        CaptureListItem(
+                            capture = capture,
+                            onClick = { onOpenCapture(capture.id) },
+                            onDelete = viewModel::delete,
+                            onArchive = { id, _ -> viewModel.archive(id) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
                     }
                 }
             }
@@ -153,8 +153,8 @@ private fun SuggestedQueries(onPick: (String) -> Unit) {
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
         ),
-        color = MaterialTheme.colorScheme.tertiary,
-        modifier = Modifier.padding(start = BlurtSpacing.xl, bottom = BlurtSpacing.s),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = BlurtSpacing.m, bottom = BlurtSpacing.s),
     )
     Column(verticalArrangement = Arrangement.spacedBy(BlurtSpacing.xs)) {
         suggestions.forEach { suggestion ->
@@ -164,9 +164,10 @@ private fun SuggestedQueries(onPick: (String) -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
+                    .defaultMinSize(minHeight = 44.dp)
                     .clip(RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.s))
                     .clickable(onClick = { onPick(suggestion) })
-                    .padding(horizontal = BlurtSpacing.xl, vertical = BlurtSpacing.s)
+                    .padding(horizontal = BlurtSpacing.m, vertical = BlurtSpacing.s)
                     .blurtPressScale(source),
             )
         }
@@ -197,7 +198,7 @@ private fun SearchField(
             .blurtPressScale(interactionSource),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = BlurtSpacing.l),
+            modifier = Modifier.padding(horizontal = BlurtSpacing.m),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -214,7 +215,7 @@ private fun SearchField(
                 modifier = Modifier
                     .weight(1f)
                     .onFocusChanged { focused = it.isFocused }
-                    .padding(vertical = 14.dp),
+                    .padding(vertical = BlurtSpacing.m),
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     color = MaterialTheme.colorScheme.onSurface,
@@ -233,7 +234,7 @@ private fun SearchField(
                 },
             )
             if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(30.dp)) {
+                IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(44.dp)) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "Clear",

@@ -178,6 +178,10 @@
   .transcript.on { opacity: 1; transform: translateY(0); }
   .transcript .cursor { display: inline-block; width: 2px; height: 1em; background: var(--gold); vertical-align: -0.15em; margin-left: 2px; animation: blink 0.9s steps(2) infinite; }
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .u-tool { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); letter-spacing: 0.3px; cursor: pointer; padding: 6px; border-radius: 12px; transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1); }
+  .u-tool span { font-size: 11px; }
+  .u-tool:active { transform: scale(0.93); }
   .chip { margin-top: 18px; display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: var(--gold-soft); border: 1px solid rgba(0,122,255,0.32); color: var(--gold); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; opacity: 0; transform: translateY(8px) scale(0.94); transition: opacity 0.3s cubic-bezier(0.34,1.56,0.64,1), transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
   .chip.on { opacity: 1; transform: translateY(0) scale(1); }
   .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); animation: pulse-dot 1.2s ease-in-out infinite; }
@@ -221,7 +225,7 @@
     border: 1px solid var(--hairline); cursor: pointer;
     transition: all 0.2s ease;
   }
-  .chip-pill.active { color: #1A1405; background: linear-gradient(180deg, #E6B95F, #C99A44); border-color: transparent; box-shadow: 0 4px 14px rgba(0,122,255,0.3); }
+  .chip-pill.active { color: #fff; background: linear-gradient(180deg, #2E8BFF, #0069E0); border-color: transparent; box-shadow: 0 4px 14px rgba(0,122,255,0.3); }
   .lib-list { padding: 10px 26px 0; }
   .lib-row { display: flex; align-items: center; gap: 14px; padding: 14px 2px; cursor: pointer; border-radius: 12px; }
   .lib-row:hover { background: rgba(255,255,255,0.03); }
@@ -331,9 +335,12 @@
   .sheet .actions { display: flex; gap: 12px; margin-top: 26px; }
   .btn { flex: 1; height: 50px; border-radius: 14px; font-size: 16px; font-weight: 600; border: none; cursor: pointer; display: grid; place-items: center; transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1), filter 0.16s ease; font-family: var(--font); }
   .btn:active { transform: scale(0.965); }
-  .btn.primary { background: linear-gradient(180deg, #E6B95F, #C99A44); color: #1A1405; box-shadow: 0 8px 22px rgba(0,122,255,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
+  .btn.primary { background: linear-gradient(180deg, #2E8BFF, #0069E0); color: #fff; box-shadow: 0 8px 22px rgba(0,122,255,0.35), inset 0 1px 0 rgba(255,255,255,0.3); }
   .btn.primary:active { filter: brightness(0.94); }
   .btn.ghost { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
+  .toast { position: absolute; left: 22px; right: 22px; bottom: 76px; background: #30D158; color: #fff; border-radius: 999px; padding: 13px 18px; font-size: 13.5px; font-weight: 600; line-height: 1.4; display: flex; align-items: center; gap: 9px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); opacity: 0; transform: translateY(14px); transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none; }
+  .toast.on { opacity: 1; transform: translateY(0); }
+  .toast .tick { width: 17px; height: 17px; border-radius: 50%; background: rgba(255,255,255,0.22); display: grid; place-items: center; font-size: 10px; flex-shrink: 0; }
   .btn.ghost:active { filter: brightness(1.15); }
 
   /* ------- page controls ------- */
@@ -632,6 +639,55 @@
     </div>
   </div>
 
+  <!-- ================= UNDERSTANDING (LIVE AI ANALYSIS) ================= -->
+  <div class="screen" id="understanding">
+    <div class="inner" style="padding-top:0;">
+      <div class="back-row"><div class="back" onclick="showScreen('home')">‹</div></div>
+      <div style="text-align:center; margin-top:26px;">
+        <div class="lab" style="font-size:12px; font-weight:600; letter-spacing:1.2px; color:var(--gold); text-transform:uppercase;">Live AI Analysis</div>
+      </div>
+      <div style="margin:22px 26px 0;">
+        <div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; text-align:center;">
+          <div style="font-size:20px; font-weight:700; letter-spacing:-0.01em;">Message ChatGPT</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:center; margin-top:18px;">
+        <div class="chip-pill active" style="cursor:default;">🔔 Reminder</div>
+        <div class="chip-pill" style="cursor:default;">⏱ in 4 minutes</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <div class="ring" style="width:44px; height:44px; border-radius:50%; border:3px solid var(--gold-soft); border-top-color:var(--gold); animation:spin 0.9s linear infinite;"></div>
+        <div style="margin-top:14px; font-size:17px; font-weight:600;">Understanding…</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex; justify-content:center; gap:38px; padding:10px 0 26px;">
+        <div class="u-tool" onclick="showScreen('home')">🗑<span>Discard</span></div>
+        <div class="u-tool" onclick="showScreen('detail')">🔗<span>Share</span></div>
+        <div class="u-tool" onclick="showScreen('detail')">✏️<span>Edit</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= REVIEW & SAVE ================= -->
+  <div class="screen" id="review">
+    <div class="inner" style="padding-top:0;">
+      <div class="back-row"><div class="back" onclick="showScreen('home')">‹</div></div>
+      <div style="flex:1"></div>
+      <div style="text-align:center; padding:0 30px;">
+        <div class="chip-pill active" style="cursor:default; margin-bottom:16px;">🔔 Reminder · in 4 minutes</div>
+        <div style="font-size:26px; font-weight:700; letter-spacing:-0.02em; line-height:1.25;">Message ChatGPT</div>
+        <div style="margin-top:12px; font-size:14px; color:var(--muted); font-weight:500;">Today, August 14</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex; gap:12px; padding:0 26px 22px;">
+        <button class="btn ghost" style="flex:0 0 110px;" onclick="showScreen('detail')">Edit</button>
+        <button class="btn primary" onclick="showReviewToast()">Save Blurt</button>
+      </div>
+      <div class="toast" id="toast"><span class="tick">✓</span><span id="toastText">Blurt saved. Message ChatGPT. You'll be reminded in 4 min.</span></div>
+    </div>
+  </div>
+
   <!-- recording sheet -->
   <div class="overlay" id="backdrop"></div>
   <div class="sheet" id="sheet">
@@ -652,6 +708,8 @@
   <div class="screen-dot" data-s="library" onclick="showScreen('library')"></div>
   <div class="screen-dot" data-s="search" onclick="showScreen('search')"></div>
   <div class="screen-dot" data-s="detail" onclick="showScreen('detail')"></div>
+  <div class="screen-dot" data-s="understanding" onclick="showScreen('understanding')"></div>
+  <div class="screen-dot" data-s="review" onclick="showScreen('review')"></div>
   <div class="screen-dot" data-s="profile" onclick="showScreen('profile')"></div>
 </div>
 <div class="screen-labels">
@@ -660,6 +718,8 @@
   <span data-s="library" onclick="showScreen('library')">LIBRARY</span>
   <span data-s="search" onclick="showScreen('search')">SEARCH</span>
   <span data-s="detail" onclick="showScreen('detail')">DETAIL</span>
+  <span data-s="understanding" onclick="showScreen('understanding')">UNDERSTAND</span>
+  <span data-s="review" onclick="showScreen('review')">REVIEW</span>
   <span data-s="profile" onclick="showScreen('profile')">PROFILE</span>
 </div>
 
@@ -729,15 +789,15 @@
       typeText(TEXT, () => setTimeout(() => animateBars(false), 400));
     }, 620);
     setTimeout(() => { chip.classList.add('on'); wave.classList.remove('on'); }, 4300);
-    setTimeout(() => {
-      micWrap.classList.remove('recording');
-      transcript.textContent = 'Message ChatGPT';
-      transcript.classList.remove('on');
-      chip.classList.remove('on');
-      backdrop.classList.add('on');
-      sheet.classList.add('on');
-    }, 5400);
-    setTimeout(() => { running = false; hint.classList.remove('hidden'); }, 8000);
+    setTimeout(() => { showScreen('understanding'); stopRecording(); }, 5400);
+    setTimeout(() => { showScreen('review'); }, 7000);
+    setTimeout(() => { running = false; hint.classList.remove('hidden'); showScreen('home'); }, 8200);
+  }
+
+  const toast = document.getElementById('toast');
+  function showReviewToast() {
+    toast.classList.add('on');
+    setTimeout(() => { toast.classList.remove('on'); showScreen('home'); }, 2400);
   }
 
   micWrap.addEventListener('click', runDemo);
@@ -745,7 +805,7 @@
   editBtn.addEventListener('click', () => { sheet.classList.remove('on'); backdrop.classList.remove('on'); transcript.classList.add('on'); transcript.textContent = 'Message ChatGPT'; running = false; setTimeout(() => hint.classList.remove('hidden'), 300); });
 
   // --- navigation ---
-  const screenIds = ['login', 'home', 'library', 'search', 'detail', 'profile'];
+  const screenIds = ['login', 'home', 'library', 'search', 'detail', 'understanding', 'review', 'profile'];
   const tabBar = document.querySelector('.tabbar');
   function showScreen(id) {
     // The tab bar belongs only to the three tabbed screens — never login,

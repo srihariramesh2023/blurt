@@ -79,8 +79,10 @@ import com.blurt.app.ui.components.BlurtLogo
 import com.blurt.app.ui.login.LoginScreen
 import com.blurt.app.ui.navigation.BlurtNavHost
 import com.blurt.app.ui.navigation.BlurtRoutes
+import com.blurt.app.ui.theme.BlurtMotion
 import com.blurt.app.ui.theme.BlurtTheme
 import com.blurt.app.ui.theme.ThemeMode
+import com.blurt.app.ui.theme.rememberReduceMotion
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -149,10 +151,17 @@ private fun BlurtAppRoot(
     }
 
     BlurtTheme(darkTheme = darkTheme) {
+        // The auth gate is a full-screen state change: a calm crossfade,
+        // spring-physics by default, plain fade when the OS reduces motion.
+        val reduceMotion = rememberReduceMotion()
         AnimatedContent(
             targetState = authState,
             transitionSpec = {
-                fadeIn(tween(350)) togetherWith fadeOut(tween(200))
+                if (reduceMotion) {
+                    fadeIn(tween(150)) togetherWith fadeOut(tween(150))
+                } else {
+                    fadeIn(BlurtMotion.standard()) togetherWith fadeOut(BlurtMotion.micro())
+                }
             },
             label = "authGate",
         ) { state ->

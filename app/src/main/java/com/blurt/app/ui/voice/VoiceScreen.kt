@@ -1,6 +1,8 @@
 package com.blurt.app.ui.voice
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,11 +23,13 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +57,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,10 +68,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.ai.CaptureAnalysis
 import com.blurt.app.ui.components.BlurtIcons
+import com.blurt.app.ui.components.BlurtToast
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
+import com.blurt.app.ui.theme.BlurtMotion
+import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.rememberReduceMotion
 import com.blurt.app.util.TimeFormat
 import kotlin.math.sin
 
@@ -101,6 +111,7 @@ fun VoiceScreen(
 
     val context = LocalContext.current
     val haptics = rememberBlurtHaptics()
+    val reduceMotion = rememberReduceMotion()
 
     // Multimodal feedback: visual + haptic + sound at the same instant.
     // Mic press → tick + start sound; stop → double tick + stop sound.
@@ -154,8 +165,9 @@ fun VoiceScreen(
         saved?.let {
             haptics.success()
             com.blurt.app.ui.components.BlurtSound.playSave()
+            // The screen shows the green toast over the review; it pops back
+            // to Home when the toast leaves.
             viewModel.onSavedHandled()
-            onSaved()
         }
     }
 
@@ -169,7 +181,7 @@ fun VoiceScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = BlurtSpacing.grouped),
     ) {
         BlurtTopBar(
             title = "",
@@ -181,13 +193,17 @@ fun VoiceScreen(
         AnimatedContent(
             targetState = phase,
             transitionSpec = {
-                val rise = slideInVertically(tween(360)) { it / 4 }
-                (fadeIn(tween(220)) + rise) togetherWith fadeOut(tween(160))
+                if (reduceMotion) {
+                    (fadeIn(tween(BlurtMotion.FADE_MS)) togetherWith fadeOut(tween(BlurtMotion.FADE_MS / 2)))
+                } else {
+                    val rise = slideInVertically(BlurtMotion.entrance()) { it / 4 }
+                    (fadeIn(BlurtMotion.standard()) + rise) togetherWith fadeOut(BlurtMotion.micro())
+                }
             },
             label = "voicePhase",
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 28.dp),
+                .padding(bottom = BlurtSpacing.l),
         ) { current ->
             when (current) {
                 VoicePhase.IDLE -> IdleState(
@@ -202,8 +218,14 @@ fun VoiceScreen(
                     onStop = onStop,
                     onCancel = viewModel::cancel,
                 )
-                VoicePhase.ANALYZING -> AnalyzingState(transcript = transcript)
-                VoicePhase.CONFIRM -> ConfirmState(
+                VoicePhase.ANALYZING -> UnderstandingState(
+                    transcript = transcript,
+                    progressive = progressive,
+                    onDiscard = { viewModel.cancel() },
+                    onShare = { shareTranscript(context, transcript) },
+                    onEdit = viewModel::requestEdit,
+                )
+                VoicePhase.CONFIRM -> ReviewState(
                     transcript = transcript,
                     analysis = analysis,
                     error = error,
@@ -219,7 +241,11 @@ fun VoiceScreen(
                     onSaveWithoutReminder = viewModel::saveWithoutReminder,
                     onEdit = viewModel::requestEdit,
                 )
-                VoicePhase.SAVED -> SavedState()
+                VoicePhase.SAVED -> SavedReviewState(
+                    transcript = transcript,
+                    analysis = analysis,
+                    onDone = onSaved,
+                )
             }
         }
     }
@@ -240,7 +266,7 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(BlurtSpacing.s))
         Text(
             text = "Tap the mic and just say it — Blurt figures out the rest.",
             style = MaterialTheme.typography.bodySmall,
@@ -248,7 +274,7 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
             textAlign = TextAlign.Center,
         )
         error?.let {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(BlurtSpacing.m))
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
@@ -265,7 +291,13 @@ private fun IdleState(onMicTapped: () -> Unit, onType: () -> Unit, error: String
         )
         Spacer(Modifier.height(40.dp))
         val typeSource = rememberBlurtInteractionSource()
-        TextButton(onClick = onType, interactionSource = typeSource, modifier = Modifier.blurtPressScale(typeSource)) {
+        TextButton(
+            onClick = onType,
+            interactionSource = typeSource,
+            modifier = Modifier
+                .defaultMinSize(minHeight = 44.dp)
+                .blurtPressScale(typeSource),
+        ) {
             Icon(
                 imageVector = BlurtIcons.Keyboard,
                 contentDescription = null,
@@ -291,7 +323,7 @@ private fun ListeningState(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
         Text(
             text = "Listening",
             style = MaterialTheme.typography.labelMedium,
@@ -306,14 +338,14 @@ private fun ListeningState(
         Spacer(Modifier.height(32.dp))
 
         VoiceButton(listening = true, level = level, onClick = onStop)
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(BlurtSpacing.xl))
         VoiceLevelBars(level = level)
 
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(BlurtSpacing.xl))
         AnimatedVisibility(visible = progressive != null && transcript.isNotBlank()) {
             progressive?.let { UnderstandingChips(analysis = it) }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
 
         Text(
             text = if (transcript.isBlank()) "…" else transcript,
@@ -330,7 +362,7 @@ private fun ListeningState(
             TextButton(onClick = onCancel, interactionSource = cancelSource, modifier = Modifier.blurtPressScale(cancelSource)) {
                 Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.width(BlurtSpacing.m))
             val stopSource = rememberBlurtInteractionSource()
             Button(
                 onClick = onStop,
@@ -355,40 +387,112 @@ private fun ListeningState(
     }
 }
 
-/** Brief pause while the AI reads the transcript. */
+/**
+ * The understanding moment — Blurt is still reading. The board's "Live AI
+ * Analysis" screen: the transcript, the pills it has found so far, a ring
+ * that says it's working, and a quiet toolbar (discard / share / edit).
+ */
 @Composable
-private fun AnalyzingState(transcript: String) {
+private fun UnderstandingState(
+    transcript: String,
+    progressive: CaptureAnalysis?,
+    onDiscard: () -> Unit,
+    onShare: () -> Unit,
+    onEdit: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(BlurtSpacing.l))
+        Text(
+            text = "LIVE AI ANALYSIS",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
+            ),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(BlurtSpacing.m))
+
+        // The transcript in a quiet field, like the board's review surface.
+        Surface(
+            shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = transcript.ifBlank { "…" },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(BlurtSpacing.m),
+            )
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
+        progressive?.let { UnderstandingChips(analysis = it, large = true) }
+
+        Spacer(Modifier.weight(1f))
+        CircularProgressIndicator(
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 2.5.dp,
+        )
+        Spacer(Modifier.height(BlurtSpacing.m))
         Text(
             text = "Understanding…",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.weight(1f))
+
+        // The quiet toolbar: discard / share / edit.
+        Row(horizontalArrangement = Arrangement.spacedBy(BlurtSpacing.l)) {
+            UnderstandingToolbarButton(BlurtIcons.Trash, "Discard", onDiscard)
+            UnderstandingToolbarButton(BlurtIcons.Share, "Share", onShare)
+            UnderstandingToolbarButton(BlurtIcons.Keyboard, "Edit", onEdit)
+        }
+        Spacer(Modifier.height(BlurtSpacing.l))
+    }
+}
+
+@Composable
+private fun UnderstandingToolbarButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val source = rememberBlurtInteractionSource()
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .defaultMinSize(minWidth = 56.dp, minHeight = 56.dp)
+            .clip(RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.s))
+            .clickable(onClick = onClick, interactionSource = source, indication = null)
+            .blurtPressScale(source),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.height(4.dp))
         Text(
-            text = transcript,
-            style = MaterialTheme.typography.bodyMedium,
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
 }
 
 /**
- * The confirm moment — a sheet emerging from the bottom: REMINDER in blue
- * caps, the understood blurt in Title 1, a time row, and the single blue
- * action (Save Blurt) with a ghost Edit. No forms — the AI decided.
+ * The review moment — a full screen, not a sheet: the understood blurt in
+ * large type, the reminder pill and date, and a single blue Save bar with a
+ * quiet Edit beside it. No forms — the AI decided.
  */
 @Composable
-private fun ConfirmState(
+private fun ReviewState(
     transcript: String,
     analysis: CaptureAnalysis?,
     error: String?,
@@ -401,23 +505,17 @@ private fun ConfirmState(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.weight(1f))
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = com.blurt.app.ui.theme.BlurtRadii.xl,
-                topEnd = com.blurt.app.ui.theme.BlurtRadii.xl,
-            ),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = BlurtSpacing.s),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.padding(
-                    start = 24.dp,
-                    end = 24.dp,
-                    top = 28.dp,
-                    bottom = 24.dp,
-                ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                if (hasReminder) {
+            if (hasReminder) {
+                Surface(
+                    shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.pill),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
                     Text(
                         text = "REMINDER",
                         style = MaterialTheme.typography.labelMedium.copy(
@@ -425,147 +523,140 @@ private fun ConfirmState(
                             letterSpacing = androidx.compose.ui.unit.TextUnit(1.2f, androidx.compose.ui.unit.TextUnitType.Sp),
                         ),
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     )
-                    Spacer(Modifier.height(12.dp))
                 }
+                Spacer(Modifier.height(BlurtSpacing.m))
+            }
+            Text(
+                text = transcript,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(BlurtSpacing.m))
+            if (hasReminder && analysis?.reminderAt != null) {
+                // Reminder · in 4 minutes — the pill, then the date line.
                 Text(
-                    text = transcript,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    text = "Reminder · ${TimeFormat.inDuration(analysis.reminderAt)}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = TimeFormat.todayLabel(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                analysis?.let { UnderstandingChips(analysis = it, large = true) }
+            }
+            Spacer(Modifier.height(BlurtSpacing.m))
+            if (!hasReminder && analysis?.reminderAt != null) {
+                Text(
+                    text = "That time has already passed — saved as a note.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(20.dp))
-                if (hasReminder && analysis?.reminderAt != null) {
-                    // The time row — bell in a blue-soft tile, plain words.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = BlurtIcons.Bell,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(17.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "in ${TimeFormat.inDuration(analysis.reminderAt)} · ${analysis.intent.label}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.height(18.dp))
-                } else {
-                    analysis?.let { UnderstandingChips(analysis = it, large = true) }
-                    Spacer(Modifier.height(18.dp))
-                }
-                if (!hasReminder && analysis?.reminderAt != null) {
-                    Text(
-                        text = "That time has already passed — saved as a note.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-                error?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-                notice?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                val saveSource = rememberBlurtInteractionSource()
-                Button(
-                    onClick = onSave,
-                    interactionSource = saveSource,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .blurtPressScale(saveSource),
-                    shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
-                }
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val editSource = rememberBlurtInteractionSource()
-                    TextButton(onClick = onEdit, interactionSource = editSource, modifier = Modifier.blurtPressScale(editSource)) {
-                        Text("Edit", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (hasReminder) {
-                        Spacer(Modifier.width(10.dp))
-                        Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(10.dp))
-                        val quietSource = rememberBlurtInteractionSource()
-                        TextButton(
-                            onClick = onSaveWithoutReminder,
-                            interactionSource = quietSource,
-                            modifier = Modifier.blurtPressScale(quietSource),
-                        ) {
-                            Text("Save without reminder", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+                Spacer(Modifier.height(12.dp))
+            }
+            error?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+            notice?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(12.dp))
             }
         }
+        Spacer(Modifier.height(BlurtSpacing.l))
+
+        // The blue action bar: Save Blurt fills, Edit sits quiet beside it.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val editSource = rememberBlurtInteractionSource()
+            TextButton(
+                onClick = onEdit,
+                interactionSource = editSource,
+                modifier = Modifier.blurtPressScale(editSource),
+            ) {
+                Text("Edit", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(BlurtSpacing.s))
+            val saveSource = rememberBlurtInteractionSource()
+            Button(
+                onClick = onSave,
+                interactionSource = saveSource,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(54.dp)
+                    .blurtPressScale(saveSource),
+                shape = RoundedCornerShape(com.blurt.app.ui.theme.BlurtRadii.l),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        if (hasReminder) {
+            Spacer(Modifier.height(4.dp))
+            val quietSource = rememberBlurtInteractionSource()
+            TextButton(
+                onClick = onSaveWithoutReminder,
+                interactionSource = quietSource,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 44.dp)
+                    .blurtPressScale(quietSource),
+            ) {
+                Text("Save without reminder", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
     }
 }
 
-/** A brief blue check — then the screen pops itself. */
+/** The saved moment — the review stays, a green toast confirms, then Home. */
 @Composable
-private fun SavedState() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        var visible by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { visible = true }
-        val scale by animateFloatAsState(if (visible) 1f else 0.6f, tween(320))
-        Box(
-            modifier = Modifier
-                .size(88.dp)
-                .scale(scale)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = BlurtIcons.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(40.dp),
-            )
-        }
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = "Saved",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
+private fun SavedReviewState(
+    transcript: String,
+    analysis: CaptureAnalysis?,
+    onDone: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        ReviewState(
+            transcript = transcript,
+            analysis = analysis,
+            error = null,
+            notice = null,
+            onSave = {},
+            onSaveWithoutReminder = {},
+            onEdit = {},
+        )
+        val reminderText = analysis?.reminderAt
+            ?.takeIf { it > System.currentTimeMillis() }
+            ?.let { ", you'll be reminded ${TimeFormat.inDuration(it)}" }
+            .orEmpty()
+        BlurtToast(
+            message = "Blurt saved. $transcript$reminderText.",
+            onDismissed = onDone,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
 }
@@ -600,7 +691,7 @@ private fun VoiceButton(listening: Boolean, level: Float, onClick: () -> Unit) {
         }
         val pressScale by animateFloatAsState(
             targetValue = if (listening) 1f + level * 0.04f else 1f,
-            animationSpec = tween(120),
+            animationSpec = BlurtMotion.micro(),
             label = "micPress",
         )
         // A solid system-blue circle with a white glyph — the Voice Memos
@@ -627,7 +718,13 @@ private fun VoiceButton(listening: Boolean, level: Float, onClick: () -> Unit) {
     }
 }
 
-/** Seven thin bars that ride the input level — alive, never flashy. */
+/**
+ * Seven thin bars that ride the input level — alive, never flashy.
+ *
+ * The bar is a fixed-size box; the level animates `scaleY` on the
+ * transform layer (anchored to the baseline) — never layout churn per
+ * frame. Transforming beats relayouting: same motion, compositor-friendly.
+ */
 @Composable
 private fun VoiceLevelBars(level: Float) {
     val infinite = rememberInfiniteTransition(label = "levelIdle")
@@ -641,15 +738,21 @@ private fun VoiceLevelBars(level: Float) {
         repeat(7) { index ->
             val phase = sin(index * 1.1).toFloat()
             val raw = if (level > 0.02f) level else 0.18f + 0.12f * idle
-            val height by animateFloatAsState(
-                targetValue = 8.dp.value * (0.5f + raw * (0.9f + phase * 0.3f)),
-                animationSpec = tween(90),
+            val scale by animateFloatAsState(
+                // Same envelope as before, normalized to the fixed 16dp bar:
+                // scale = oldHeight/16 = (0.5 + raw·(0.9 + phase·0.3)) / 2.
+                targetValue = (0.5f + raw * (0.9f + phase * 0.3f)) / 2f,
+                animationSpec = BlurtMotion.micro(),
                 label = "bar$index",
             )
             Box(
                 modifier = Modifier
                     .width(4.dp)
-                    .height(height.dp)
+                    .height(16.dp)
+                    .graphicsLayer {
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    }
                     .clip(RoundedCornerShape(2.dp))
                     .background(
                         if (index % 2 == 0) MaterialTheme.colorScheme.primary
@@ -686,6 +789,18 @@ private fun UnderstandingChips(analysis: CaptureAnalysis, large: Boolean = false
                 )
             }
         }
+    }
+}
+
+/** Hand the transcript to another app (Messages, Notes, wherever). */
+private fun shareTranscript(context: Context, text: String) {
+    if (text.isBlank()) return
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(send, "Share blurt"))
     }
 }
 

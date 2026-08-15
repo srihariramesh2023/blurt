@@ -23,14 +23,14 @@ object BlurtDark {
     /** iOS tertiarySystemGroupedBackground / elevated — sheets, menus, bars. */
     val SurfaceElevated = Color(0xFF2C2C2E)
 
-    /** iOS label. */
+    /** iOS label — pure white in dark. */
     val TextPrimary = Color(0xFFFFFFFF)
 
-    /** iOS secondaryLabel (Apple's exact dark value). */
-    val TextSecondary = Color(0xFFAEAEB2)
+    /** Secondary label = primary at 60% — one opacity tier, no new grays. */
+    val TextSecondary = TextPrimary.copy(alpha = 0.6f)
 
-    /** iOS tertiaryLabel / systemGray. */
-    val TextTertiary = Color(0xFF8E8E93)
+    /** Tertiary label = primary at 30% — decoration only, never body text. */
+    val TextTertiary = TextPrimary.copy(alpha = 0.3f)
 
     /** iOS separator — full opacity here; callers thin it with alpha. */
     val Hairline = Color(0xFF38383A)
@@ -62,14 +62,14 @@ object BlurtLight {
     /** iOS tertiarySystemGroupedBackground / elevated. */
     val SurfaceElevated = Color(0xFFFFFFFF)
 
-    /** iOS label. */
+    /** iOS label — pure black in light. */
     val TextPrimary = Color(0xFF000000)
 
-    /** iOS secondaryLabel ≈ systemGray. */
-    val TextSecondary = Color(0xFF8E8E93)
+    /** Secondary label = primary at 60% — one opacity tier, no new grays. */
+    val TextSecondary = TextPrimary.copy(alpha = 0.6f)
 
-    /** iOS tertiaryLabel. */
-    val TextTertiary = Color(0xFFC7C7CC)
+    /** Tertiary label = primary at 30% — decoration only, never body text. */
+    val TextTertiary = TextPrimary.copy(alpha = 0.3f)
 
     /** iOS separator. */
     val Hairline = Color(0xFFC6C6C8)

@@ -12,6 +12,7 @@ import com.blurt.app.ui.capture.CaptureScreen
 import com.blurt.app.ui.detail.DetailScreen
 import com.blurt.app.ui.home.HomeScreen
 import com.blurt.app.ui.library.LibraryScreen
+import com.blurt.app.ui.profile.ProfileScreen
 import com.blurt.app.ui.search.SearchScreen
 import com.blurt.app.ui.theme.ThemeMode
 import com.blurt.app.ui.voice.VoiceScreen
@@ -23,6 +24,9 @@ object BlurtRoutes {
 
     /** Voice-first capture — the primary way in. */
     const val VOICE = "voice"
+
+    /** The account surface — avatar → profile page. */
+    const val PROFILE = "profile"
 
     /** The typed composer; optional pre-filled text (e.g. Edit after voice). */
     const val CAPTURE = "capture?text={text}"
@@ -51,14 +55,21 @@ fun BlurtNavHost(
         composable(BlurtRoutes.HOME) {
             HomeScreen(
                 user = user,
-                themeMode = themeMode,
-                onThemeChange = onThemeChange,
-                onSignOut = onSignOut,
                 onVoice = { navController.navigate(BlurtRoutes.VOICE) },
                 onCapture = { navController.navigate(BlurtRoutes.capture()) },
                 onOpenCapture = { navController.navigate(BlurtRoutes.detail(it)) },
                 onOpenLibrary = { navController.navigate(BlurtRoutes.LIBRARY) },
                 onSearch = { navController.navigate(BlurtRoutes.SEARCH) },
+                onOpenProfile = { navController.navigate(BlurtRoutes.PROFILE) },
+            )
+        }
+        composable(BlurtRoutes.PROFILE) {
+            ProfileScreen(
+                user = user,
+                themeMode = themeMode,
+                onThemeChange = onThemeChange,
+                onSignOut = onSignOut,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(BlurtRoutes.LIBRARY) {

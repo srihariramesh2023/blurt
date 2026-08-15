@@ -6,7 +6,6 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -55,6 +54,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
+import com.blurt.app.ui.theme.BlurtMotion
+import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.rememberReduceMotion
 import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.isHttpUrl
 import com.blurt.app.util.normalizedHttpUrl
@@ -110,10 +112,10 @@ fun CaptureScreen(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = BlurtSpacing.grouped),
     ) {
         BlurtTopBar(title = "New Blurt", onBack = onBack)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
 
         val normalized = content.normalizedHttpUrl()
         val isLink = content.isNotBlank() && normalized.isHttpUrl()
@@ -137,7 +139,7 @@ fun CaptureScreen(
                 cursorColor = MaterialTheme.colorScheme.primary,
             ),
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(BlurtSpacing.s))
         // Quiet helper: what Blurt understood so far.
         Text(
             text = when {
@@ -151,10 +153,15 @@ fun CaptureScreen(
 
         AnimatedVisibility(
             visible = error != null,
-            enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+            enter = if (rememberReduceMotion()) {
+                fadeIn(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS)) +
+                    expandVertically(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS))
+            } else {
+                fadeIn(BlurtMotion.micro()) + expandVertically(BlurtMotion.micro())
+            },
         ) {
             error?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(BlurtSpacing.s))
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
@@ -164,10 +171,15 @@ fun CaptureScreen(
         }
         AnimatedVisibility(
             visible = notice != null,
-            enter = fadeIn(tween(200)) + expandVertically(tween(200)),
+            enter = if (rememberReduceMotion()) {
+                fadeIn(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS)) +
+                    expandVertically(androidx.compose.animation.core.tween(BlurtMotion.FADE_MS))
+            } else {
+                fadeIn(BlurtMotion.micro()) + expandVertically(BlurtMotion.micro())
+            },
         ) {
             notice?.let {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(BlurtSpacing.s))
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
@@ -205,7 +217,7 @@ fun CaptureScreen(
                 Text("Save Blurt", style = MaterialTheme.typography.labelLarge)
             }
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(BlurtSpacing.m))
     }
 
     // Confirm sheet: the AI found a time — set a reminder or just save.
@@ -230,19 +242,19 @@ fun CaptureScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(BlurtSpacing.m))
                 Text(
                     text = "Remind me at ${TimeFormat.full(pending.at)}",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(BlurtSpacing.s))
                 Text(
                     text = "A Blurt notification will pop up when it's time.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(BlurtSpacing.l))
                 val remindSource = rememberBlurtInteractionSource()
                 Button(
                     onClick = {
@@ -274,7 +286,7 @@ fun CaptureScreen(
                 ) {
                     Text("Just save", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(BlurtSpacing.l))
             }
         }
     }

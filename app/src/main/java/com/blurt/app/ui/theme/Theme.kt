@@ -23,7 +23,7 @@ private val DarkScheme = darkColorScheme(
     onSecondary = BlurtDark.OnAccent,
     secondaryContainer = BlurtDark.AccentSoft,
     onSecondaryContainer = BlurtDark.Accent,
-    tertiary = BlurtDark.TextSecondary,
+    tertiary = BlurtDark.TextTertiary,
     onTertiary = BlurtDark.TextPrimary,
     background = BlurtDark.Background,
     onBackground = BlurtDark.TextPrimary,
@@ -47,7 +47,7 @@ private val LightScheme = lightColorScheme(
     onSecondary = BlurtLight.OnAccent,
     secondaryContainer = BlurtLight.AccentSoft,
     onSecondaryContainer = BlurtLight.Accent,
-    tertiary = BlurtLight.TextSecondary,
+    tertiary = BlurtLight.TextTertiary,
     onTertiary = BlurtLight.TextPrimary,
     background = BlurtLight.Background,
     onBackground = BlurtLight.TextPrimary,
@@ -71,6 +71,16 @@ private val LightScheme = lightColorScheme(
 fun fieldFill(): Color =
     if (MaterialTheme.colorScheme.background.luminance() < 0.5f) BlurtDark.FieldFill
     else BlurtLight.FieldFill
+
+/**
+ * The semantic success green (iOS systemGreen), resolved for the active
+ * theme — toasts, completions. Exposed because Material3's scheme has no
+ * success slot; the semantic color only ever means success.
+ */
+@Composable
+fun successColor(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) BlurtDark.Success
+    else BlurtLight.Success
 
 @Composable
 fun BlurtTheme(
