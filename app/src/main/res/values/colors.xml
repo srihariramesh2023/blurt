@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#E3B16B</color>
-    <color name="blurt_window_background">#0E0E11</color>
+    <color name="blurt_window_background">#000000</color>
 </resources>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The mic — Blurt's voice-first identity — a single white glyph centered
-     in the 108dp adaptive-icon safe zone, matching the orb in the app. -->
+<!-- Themed-icon silhouette (Android 13+): the same mic glyph, alpha-only so
+     launchers can tint it to match the wallpaper. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

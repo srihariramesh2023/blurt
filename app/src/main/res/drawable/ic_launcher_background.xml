@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Blurt orb — a violet radial gradient that glows at the center and
+     deepens to the accent at the edges. Full-bleed square so every launcher
+     mask crops it cleanly. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="44"
+                android:gradientRadius="72"
+                android:startColor="#9B7BFF"
+                android:endColor="#5A45F2" />
+        </aapt:attr>
+    </path>
+</vector>

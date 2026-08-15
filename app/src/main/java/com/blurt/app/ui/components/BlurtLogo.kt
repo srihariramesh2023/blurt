@@ -14,10 +14,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Blurt's brand mark — an iOS-style app icon: a solid system-blue rounded
- * square with the white speech-bubble glyph (design standard §7). The corner
- * radius approximates Apple's squircle. The accent blue is the only color —
- * no gradients, no glass, no gold.
+ * Blurt's brand mark — an iOS-style app icon: a solid violet rounded square
+ * (the theme accent) with the white speech-bubble glyph. The corner radius
+ * approximates Apple's squircle. The accent is the only color — no
+ * gradients, no glass, no gold.
  */
 @Composable
 fun BlurtLogo(size: Dp, modifier: Modifier = Modifier) {

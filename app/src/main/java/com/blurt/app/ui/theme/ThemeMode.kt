@@ -26,12 +26,21 @@ class ThemePreferences(context: Context) {
     )
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
+    private val _onboardingComplete = MutableStateFlow(prefs.getBoolean(ONBOARDING_KEY, false))
+    val onboardingComplete: StateFlow<Boolean> = _onboardingComplete.asStateFlow()
+
     fun setThemeMode(mode: ThemeMode) {
         _themeMode.value = mode
         prefs.edit().putString(KEY, mode.name).apply()
     }
 
+    fun completeOnboarding() {
+        _onboardingComplete.value = true
+        prefs.edit().putBoolean(ONBOARDING_KEY, true).apply()
+    }
+
     private companion object {
         const val KEY = "theme_mode"
+        const val ONBOARDING_KEY = "onboarding_complete"
     }
 }
