@@ -126,6 +126,10 @@ keyPassword=…
 and run `./gradlew assembleRelease`. Without any keystore the release build
 stays unsigned (debug builds are unaffected).
 
+## License
+
+Released under the [MIT License](LICENSE).
+
 ## Setup — provider-side
 
 The app builds and CI is green **without** any Firebase configuration. To
