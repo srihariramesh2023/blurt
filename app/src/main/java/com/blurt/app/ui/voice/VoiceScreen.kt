@@ -97,7 +97,9 @@ fun VoiceScreen(
         BlurtTopBar(
             title = "",
             onBack = {
-                if (phase == VoicePhase.LISTENING || phase == VoicePhase.ANALYZING || phase == VoicePhase.REPLYING) {
+                if (phase == VoicePhase.LISTENING || phase == VoicePhase.ANALYZING ||
+                    phase == VoicePhase.REPLYING || phase == VoicePhase.FOLLOWUP
+                ) {
                     viewModel.cancel()
                 }
                 onBack()

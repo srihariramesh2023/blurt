@@ -105,6 +105,7 @@ fun VoiceCaptureFlow(
     val analysis by viewModel.analysis.collectAsStateWithLifecycle()
     val progressive by viewModel.progressive.collectAsStateWithLifecycle()
     val reply by viewModel.reply.collectAsStateWithLifecycle()
+    val followUpQuestion by viewModel.followUpQuestion.collectAsStateWithLifecycle()
     val level by viewModel.level.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
@@ -154,6 +155,18 @@ fun VoiceCaptureFlow(
                 transcript = transcript,
                 progressive = progressive,
                 level = level,
+                onStop = {
+                    haptics.doubleTick()
+                    BlurtSound.playStop()
+                    viewModel.stop()
+                },
+                onCancel = viewModel::cancel,
+            )
+            VoicePhase.FOLLOWUP -> ListeningState(
+                transcript = transcript,
+                progressive = progressive,
+                level = level,
+                prompt = followUpQuestion,
                 onStop = {
                     haptics.doubleTick()
                     BlurtSound.playStop()
@@ -216,6 +229,7 @@ private fun ListeningState(
     transcript: String,
     progressive: CaptureAnalysis?,
     level: Float,
+    prompt: String? = null,
     onStop: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -232,6 +246,17 @@ private fun ListeningState(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+        prompt?.let {
+            Spacer(Modifier.height(BlurtSpacing.s))
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
             )
         }
         Spacer(Modifier.weight(1f))

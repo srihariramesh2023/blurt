@@ -45,11 +45,22 @@ class BlurtReminderReceiver : BroadcastReceiver() {
                 ACTION_SNOOZE -> snooze(context, captureId)
                 ACTION_COMPLETE -> complete(context, captureId)
                 ACTION_AUTO_DELETE -> autoDelete(context, captureId)
+                ACTION_HEADS_UP -> onHeadsUpFired(context, captureId, intent.getStringExtra(EXTRA_CONTENT).orEmpty())
                 else -> onReminderFired(context, captureId, intent.getStringExtra(EXTRA_CONTENT).orEmpty())
             }
         } catch (t: Throwable) {
             android.util.Log.e(TAG, "receiver failed", t)
         }
+    }
+
+    /**
+     * The follow-up nudge: a plain "coming up" heads-up fired a few minutes
+     * before the real reminder. Just a heads-up — no Snooze/Done actions
+     * (the real reminder fires shortly with the full set) and no auto-delete.
+     */
+    private fun onHeadsUpFired(context: Context, captureId: Long, content: String) {
+        if (content.isBlank()) return
+        postHeadsUp(context, captureId, content)
     }
 
     /**
@@ -243,6 +254,41 @@ class BlurtReminderReceiver : BroadcastReceiver() {
             .build()
 
         notificationManager.notify(captureId.toInt(), notification)
+    }
+
+    /** The heads-up nudge — the same channel, a plain notice, no actions. */
+    private fun postHeadsUp(context: Context, captureId: Long, content: String) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                "Blurt reminders",
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { description = "Reminders you set on your blurts" }
+        )
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_OPEN_CAPTURE_ID, captureId)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            captureId.toInt(),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Coming up soon")
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setContentIntent(contentIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        notificationManager.notify(captureId.toInt() + HEADS_UP_NOTIFY_OFFSET, notification)
     }        companion object {
         private const val TAG = "BlurtReminderReceiver"
         const val EXTRA_CAPTURE_ID = "blurt.reminder.captureId"
@@ -250,7 +296,10 @@ class BlurtReminderReceiver : BroadcastReceiver() {
         private const val ACTION_SNOOZE = "blurt.reminder.snooze"
         private const val ACTION_COMPLETE = "blurt.reminder.complete"
         const val ACTION_AUTO_DELETE = "blurt.reminder.autoDelete"
+        const val ACTION_HEADS_UP = "blurt.reminder.headsUp"
         private const val SNOOZE_MS = 10 * 60_000L
+        /** Keeps the heads-up notification apart from the reminder's (same id namespace). */
+        private const val HEADS_UP_NOTIFY_OFFSET = 2_000_000
         private const val CHANNEL_ID = "blurt_reminders"
 
         /** How long a one-shot reminder lingers after firing before auto-delete. */

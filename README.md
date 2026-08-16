@@ -20,7 +20,9 @@ keeps only the things that deserve keeping.
   what the assistant decides is worth keeping is saved immediately, reminders
   included — no confirm screen in the way. Say *"don't save this"* (or
   "forget it", "just venting"…) and Blurt acknowledges, saves nothing, and
-  drops the transcript entirely.
+  drops the transcript entirely. **Two-turn loop**: when a reminder saves,
+  Blurt asks "Want me to remind you 15 minutes before?" and arms a heads-up
+  nudge if you say yes — the answer is parsed locally, no AI call needed.
 - **Capture** — voice or text, whichever you reach for. Links are detected by
   rule; everything else is classified by AI into a fixed intent and category
   list, and mentioned times become reminders.
@@ -247,6 +249,10 @@ to the device's built-in TTS so the reply is still spoken.
 
 - **Auto-save by default**: whatever the assistant decides is worth keeping is
   saved immediately, reminders included — no confirm screen in the way.
+- **Follow-up question (v2)**: when a reminder saves, Blurt keeps the mic open
+  and asks *"Want me to remind you 15 minutes before?"* — a yes arms a
+  separate heads-up alarm a few minutes early (its own notification, no
+  actions, so it can't collide with the real reminder).
 - **Say "don't save this"** (or "forget it", "just venting"…) and Blurt
   acknowledges, saves nothing, and **drops the transcript entirely** — the
   one assistant that forgets on purpose.

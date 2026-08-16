@@ -34,6 +34,32 @@ class ReminderScheduler(private val context: Context) {
     fun cancel(captureId: Long) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(reminderPendingIntent(captureId, ""))
+        // A deleted/completed blurt loses its heads-up too — never leave a
+        // stray nudge for a blurt that no longer exists.
+        alarmManager.cancel(headsUpPendingIntent(captureId, ""))
+    }
+
+    /**
+     * Arms the follow-up "heads-up" nudge: a separate alarm that fires a
+     * short while before the real reminder. Its own request code keeps it
+     * apart from the reminder alarm and the auto-delete cleanup, so three
+     * alarms can coexist for one blurt without colliding.
+     */
+    fun scheduleHeadsUp(captureId: Long, content: String, atMillis: Long) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pendingIntent = headsUpPendingIntent(captureId, content)
+        val canBeExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+        if (canBeExact) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pendingIntent)
+        }
+    }
+
+    fun cancelHeadsUp(captureId: Long) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(headsUpPendingIntent(captureId, ""))
     }
 
     /**
@@ -65,6 +91,19 @@ class ReminderScheduler(private val context: Context) {
         )
     }
 
+    private fun headsUpPendingIntent(captureId: Long, content: String): PendingIntent {
+        val intent = Intent(context, BlurtReminderReceiver::class.java)
+            .setAction(BlurtReminderReceiver.ACTION_HEADS_UP)
+            .putExtra(BlurtReminderReceiver.EXTRA_CAPTURE_ID, captureId)
+            .putExtra(BlurtReminderReceiver.EXTRA_CONTENT, content)
+        return PendingIntent.getBroadcast(
+            context,
+            captureId.toInt() + HEADS_UP_OFFSET,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     private fun autoDeletePendingIntent(captureId: Long): PendingIntent {
         val intent = Intent(context, BlurtReminderReceiver::class.java)
             .setAction(BlurtReminderReceiver.ACTION_AUTO_DELETE)
@@ -80,6 +119,8 @@ class ReminderScheduler(private val context: Context) {
     companion object {
         /** Keeps the auto-delete alarm's request code apart from the reminder's. */
         private const val AUTO_DELETE_OFFSET = 3_000_000
+        /** Keeps the heads-up nudge's request code apart from the others. */
+        private const val HEADS_UP_OFFSET = 5_000_000
     }
 }
 

@@ -224,6 +224,17 @@ acknowledges — and the transcript is dropped, never persisted. No buttons on
 the reply screen; the utterance itself drives the transition. The classic
 Save / Edit review remains for the no-Groq fallback path.
 
+**Two-turn loop (v2)**: when a reminder auto-saves, Blurt keeps the mic open
+and asks "Want me to remind you 15 minutes before?" — the question appears
+under the listening line and is spoken by the same TTS. The answer is parsed
+**locally** (yes/no phrases, pure function — no AI call, no quota); a "yes"
+arms a separate heads-up alarm a few minutes before the reminder, which posts
+its own plain "Coming up soon" notification (no Snooze/Done — the real
+reminder fires with the full set), and a "no" or silence lands straight on
+the same SAVED screen. The heads-up alarm and notification use their own
+request-code / id offsets so three alarms (reminder, heads-up, auto-delete)
+can coexist for one blurt without colliding.
+
 ## 13. Sound & haptics
 
 Subtle and only on meaningful moments (causality + utility):

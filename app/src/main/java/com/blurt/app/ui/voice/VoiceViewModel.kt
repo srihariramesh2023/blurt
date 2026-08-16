@@ -16,6 +16,7 @@ import com.blurt.app.BlurtApp
 import com.blurt.app.ai.CaptureAnalysis
 import com.blurt.app.ai.CaptureAnalysisParser
 import com.blurt.app.ai.CaptureAnalyzer
+import com.blurt.app.ai.FollowUpAnswerParser
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.model.CaptureType
@@ -46,6 +47,13 @@ enum class VoicePhase {
      * and what Blurt did. Auto-advances when the utterance ends.
      */
     REPLYING,
+
+    /**
+     * The two-turn loop: after a reminder auto-saves, Blurt asks "want a
+     * heads-up before?" and listens for the answer (yes → a nudge alarm;
+     * no/anything else → straight to SAVED).
+     */
+    FOLLOWUP,
 
     /** The AI failed to classify — Try Again / Save as Note / Type instead. */
     ERROR,
@@ -139,6 +147,16 @@ class VoiceViewModel(
     /** The companion's save decision, applied when its reply finishes. */
     private var pendingSave = true
 
+    /** The follow-up question asked after a reminder auto-saves. */
+    private val _followUpQuestion = MutableStateFlow<String?>(null)
+    val followUpQuestion: StateFlow<String?> = _followUpQuestion.asStateFlow()
+
+    /** The saved reminder a yes-answer would nudge before. */
+    private var pendingHeadsUp: ReminderTarget? = null
+
+    /** The capture that got saved while the follow-up was pending. */
+    private var pendingSavedId: Long? = null
+
     private var recognizer: SpeechRecognizer? = null
     private var progressiveJob: Job? = null
 
@@ -173,7 +191,19 @@ class VoiceViewModel(
         // Warm the fallback engine now so a no-key reply doesn't pay its
         // cold start later.
         tts?.warmUp()
+        beginRecognition()
+    }
 
+    /** The follow-up round: same mic, phase stays FOLLOWUP so the question
+     *  stays on screen while the answer is heard. */
+    private fun startFollowUpListening() {
+        _progressive.value = null
+        _transcript.value = ""
+        _level.value = 0f
+        beginRecognition()
+    }
+
+    private fun beginRecognition() {
         val speech = SpeechRecognizer.createSpeechRecognizer(context)
         speech.setRecognitionListener(listener)
         recognizer?.destroy()
@@ -196,7 +226,12 @@ class VoiceViewModel(
     fun cancel() {
         tts?.stop()
         recognizer?.cancel()
-        reset()
+        if (_phase.value == VoicePhase.FOLLOWUP) {
+            // The blurt already saved — only the optional heads-up is dropped.
+            finishFollowUp(accepted = false)
+        } else {
+            reset()
+        }
     }
 
     /** \"Save Blurt\" on the confirm state — includes the reminder if detected. */
@@ -281,11 +316,17 @@ class VoiceViewModel(
                 recurrence = a.recurrence,
             )
         }
-        persist(blurts)
+        // Two-turn loop: when a reminder actually saved, keep the mic open
+        // and ask about a heads-up before the final SAVED screen.
+        persist(blurts, followUp = true)
     }
 
-    /** The actual database writes — shared by the confirm and auto-save paths. */
-    private fun persist(blurts: List<SaveBlurt>) {
+    /**
+     * The actual database writes — shared by the confirm and auto-save paths.
+     * When [followUp] is set and a reminder really got scheduled, the flow
+     * goes to FOLLOWUP (ask + listen) instead of straight to SAVED.
+     */
+    private fun persist(blurts: List<SaveBlurt>, followUp: Boolean = false) {
         val content = _transcript.value.trim()
         if (content.isBlank()) return
         val uid = (authState.value as? AuthState.SignedIn)?.user?.uid
@@ -299,6 +340,8 @@ class VoiceViewModel(
             val distinct = blurts.filter { b -> seen.add(b.content.lowercase().trim()) }
             val ids = mutableListOf<Long>()
             var firstReminderAt: Long? = null
+            var firstReminderId: Long? = null
+            var firstReminderContent: String? = null
             for (blurt in distinct) {
                 val id = runCatching {
                     repository.create(
@@ -318,15 +361,37 @@ class VoiceViewModel(
                 ids += id
                 if (blurt.reminderAt != null) {
                     reminderScheduler?.schedule(id, blurt.content, blurt.reminderAt)
-                    if (firstReminderAt == null) firstReminderAt = blurt.reminderAt
+                    if (firstReminderAt == null) {
+                        firstReminderAt = blurt.reminderAt
+                        firstReminderId = id
+                        firstReminderContent = blurt.content
+                    }
                 }
             }
             _savedReminderAt.value = firstReminderAt
             _savedCount.value = ids.size
-            _phase.value = VoicePhase.SAVED
-            _saved.value = ids.first()
+            val target = firstReminderId?.let { id ->
+                firstReminderAt?.let { at ->
+                    ReminderTarget(id, firstReminderContent.orEmpty(), at)
+                }
+            }
+            if (followUp && target != null) {
+                // Saved with a reminder — keep the conversation going.
+                pendingSavedId = ids.first()
+                askFollowUp(target)
+            } else {
+                _phase.value = VoicePhase.SAVED
+                _saved.value = ids.first()
+            }
         }
     }
+
+    /** A saved reminder the follow-up might nudge before. */
+    private data class ReminderTarget(
+        val captureId: Long,
+        val content: String,
+        val reminderAt: Long,
+    )
 
     /** One blurt's worth of save data — what actually hits the database. */
     private data class SaveBlurt(
@@ -371,6 +436,9 @@ class VoiceViewModel(
         _savedCount.value = 1
         _progressive.value = null
         _reply.value = null
+        _followUpQuestion.value = null
+        pendingHeadsUp = null
+        pendingSavedId = null
         _level.value = 0f
         _error.value = null
         _notice.value = null
@@ -396,6 +464,11 @@ class VoiceViewModel(
     private fun onSpeechEnded(finalText: String) {
         progressiveJob?.cancel()
         _level.value = 0f
+        // The follow-up round: the answer is parsed locally — no AI call.
+        if (_phase.value == VoicePhase.FOLLOWUP) {
+            handleFollowUpAnswer(finalText)
+            return
+        }
         val text = finalText.trim()
         if (text.isBlank()) {
             reset()
@@ -455,6 +528,62 @@ class VoiceViewModel(
                 _phase.value = VoicePhase.CONFIRM
             }
         }
+    }
+
+    /** Speak the follow-up question, then listen for the answer. */
+    private fun askFollowUp(target: ReminderTarget) {
+        pendingHeadsUp = target
+        _followUpQuestion.value = FOLLOW_UP_QUESTION
+        _transcript.value = ""
+        _phase.value = VoicePhase.FOLLOWUP
+        val t = tts
+        if (t != null) {
+            t.speak(FOLLOW_UP_QUESTION, ::startFollowUpListening)
+        } else {
+            // No engine (shouldn't happen) — don't stall on the question.
+            viewModelScope.launch { delay(REPLY_PAUSE_MS); startFollowUpListening() }
+        }
+    }
+
+    /**
+     * The user answered the follow-up. "Yes" arms a heads-up nudge a few
+     * minutes before the reminder; anything else — or silence — means no
+     * nudge. Either way we land on the same SAVED screen.
+     */
+    private fun handleFollowUpAnswer(finalText: String) {
+        val text = finalText.trim()
+        val accepted = FollowUpAnswerParser.parse(text)
+        finishFollowUp(accepted = accepted)
+    }
+
+    private fun finishFollowUp(accepted: Boolean) {
+        if (_phase.value != VoicePhase.FOLLOWUP) return
+        val target = pendingHeadsUp
+        pendingHeadsUp = null
+        _followUpQuestion.value = null
+        if (accepted && target != null) {
+            val nudgeAt = target.reminderAt - HEADS_UP_LEAD_MS
+            reminderScheduler?.scheduleHeadsUp(target.captureId, target.content, nudgeAt)
+            // One short confirm, then the same SAVED screen.
+            val confirm = "Done — I'll nudge you before."
+            _reply.value = confirm
+            _phase.value = VoicePhase.REPLYING
+            val t = tts
+            if (t != null) {
+                t.speak(confirm) { finishToSaved() }
+            } else {
+                viewModelScope.launch { delay(REPLY_PAUSE_MS); finishToSaved() }
+            }
+        } else {
+            finishToSaved()
+        }
+    }
+
+    private fun finishToSaved() {
+        _reply.value = null
+        _phase.value = VoicePhase.SAVED
+        pendingSavedId?.let { _saved.value = it }
+        pendingSavedId = null
     }
 
     /** The board's error state: \"Try Again\" re-runs classification. */
@@ -536,6 +665,13 @@ class VoiceViewModel(
         override fun onEndOfSpeech() = Unit
 
         override fun onError(error: Int) {
+            // The follow-up round never errors out loud — silence or a
+            // recognizer hiccup just means "no heads-up" and the SAVED
+            // screen appears as usual.
+            if (_phase.value == VoicePhase.FOLLOWUP) {
+                finishFollowUp(accepted = false)
+                return
+            }
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
@@ -587,6 +723,10 @@ class VoiceViewModel(
         private const val PROGRESSIVE_MIN_WORDS = 3
         /** How long to hold the reply on screen when no TTS engine exists. */
         private const val REPLY_PAUSE_MS = 1_200L
+        /** The two-turn question after a reminder saves. */
+        private const val FOLLOW_UP_QUESTION = "Want me to remind you 15 minutes before?"
+        /** How early the heads-up nudge fires. */
+        private const val HEADS_UP_LEAD_MS = 15 * 60_000L
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
