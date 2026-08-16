@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,8 +52,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.blurt.app.ui.components.BlurtSound
+import com.blurt.app.ui.components.BlurtToast
 import com.blurt.app.ui.components.BlurtTopBar
 import com.blurt.app.ui.components.blurtPressScale
+import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.theme.BlurtMotion
 import com.blurt.app.ui.theme.BlurtSpacing
@@ -80,11 +84,15 @@ fun CaptureScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val saved by viewModel.saved.collectAsStateWithLifecycle()
+    val savedReminderAt by viewModel.savedReminderAt.collectAsStateWithLifecycle()
+    val savedCount by viewModel.savedCount.collectAsStateWithLifecycle()
 
+    val haptics = rememberBlurtHaptics()
+    // Saved → success haptic + tone; the toast confirms, then we pop.
     LaunchedEffect(saved) {
         saved?.let {
-            viewModel.onSavedHandled()
-            onSaved()
+            haptics.success()
+            BlurtSound.playSave()
         }
     }
 
@@ -95,7 +103,7 @@ fun CaptureScreen(
         if (granted) viewModel.confirmReminder() else viewModel.dismissReminder(notificationsBlocked = true)
     }
 
-    val canSave = content.isNotBlank() && !analyzing && pendingReminder == null
+    val canSave = content.isNotBlank() && !analyzing && pendingReminder == null && saved == null
     val saveSource = rememberBlurtInteractionSource()
 
     // Autofocus the editor once on open; don't fight the user afterward.
@@ -108,10 +116,14 @@ fun CaptureScreen(
         }
     }
 
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
             .padding(horizontal = BlurtSpacing.grouped),
     ) {
         BlurtTopBar(title = "New Blurt", onBack = onBack)
@@ -218,6 +230,30 @@ fun CaptureScreen(
             }
         }
         Spacer(Modifier.height(BlurtSpacing.m))
+    }
+
+    // The save confirmation — the same green toast the voice flow shows.
+    if (saved != null) {
+        val reminderText = savedReminderAt
+            ?.takeIf { it > System.currentTimeMillis() }
+            ?.let { ", you'll be reminded ${TimeFormat.inDuration(it)}" }
+            .orEmpty()
+        val message = if (savedCount > 1) {
+            "$savedCount blurts saved$reminderText."
+        } else {
+            "Blurt saved. ${content.trim()}$reminderText."
+        }
+        BlurtToast(
+            message = message,
+            onDismissed = {
+                viewModel.onSavedHandled()
+                onSaved()
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = BlurtSpacing.m),
+        )
+    }
     }
 
     // Confirm sheet: the AI found a time — set a reminder or just save.

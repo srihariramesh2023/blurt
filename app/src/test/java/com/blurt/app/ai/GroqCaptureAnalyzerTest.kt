@@ -2,6 +2,7 @@ package com.blurt.app.ai
 
 import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureIntent
+import com.blurt.app.data.model.Recurrence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -21,10 +22,10 @@ class GroqCaptureAnalyzerTest {
     @Test
     fun extractsInnerJsonAndParsesAnalysis() {
         val raw = chatCompletionResponse(
-            """{\"intent\":\"REMINDER\",\"category\":\"HEALTH\",\"reminderAt\":\"2026-08-13T15:00:00+05:30\",\"important\":true}"""
+            """{\"blurts\":[{\"content\":\"remember the dentist\",\"intent\":\"REMINDER\",\"category\":\"HEALTH\",\"reminderAt\":\"2026-08-13T15:00:00+05:30\",\"important\":true,\"recurrence\":\"NONE\"}]}"""
         )
         val jsonText = GroqCaptureAnalyzer.extractContent(raw)!!
-        val analysis = CaptureAnalysisParser.parse(jsonText)!!
+        val analysis = CaptureAnalysisParser.parse(jsonText)!!.single()
         assertEquals(CaptureIntent.REMINDER, analysis.intent)
         assertEquals(CaptureCategory.HEALTH, analysis.category)
         assertEquals(
@@ -37,12 +38,22 @@ class GroqCaptureAnalyzerTest {
     @Test
     fun parsesNullReminderAndNoImportant() {
         val raw = chatCompletionResponse(
-            """{\"intent\":\"NOTE\",\"category\":\"PERSONAL\",\"reminderAt\":null}"""
+            """{\"blurts\":[{\"content\":\"note it\",\"intent\":\"NOTE\",\"category\":\"PERSONAL\",\"reminderAt\":null,\"important\":false,\"recurrence\":\"NONE\"}]}"""
         )
-        val analysis = CaptureAnalysisParser.parse(GroqCaptureAnalyzer.extractContent(raw)!!)!!
+        val analysis = CaptureAnalysisParser.parse(GroqCaptureAnalyzer.extractContent(raw)!!)!!.single()
         assertEquals(CaptureIntent.NOTE, analysis.intent)
         assertEquals(CaptureCategory.PERSONAL, analysis.category)
         assertNull(analysis.reminderAt)
+    }
+
+    @Test
+    fun parsesRecurringBlurts() {
+        val raw = chatCompletionResponse(
+            """{\"blurts\":[{\"content\":\"gym every Wednesday at 6pm\",\"intent\":\"REMINDER\",\"category\":\"FITNESS\",\"reminderAt\":\"2026-08-19T18:00:00+05:30\",\"important\":false,\"recurrence\":\"WEEKLY\"}]}"""
+        )
+        val analysis = CaptureAnalysisParser.parse(GroqCaptureAnalyzer.extractContent(raw)!!)!!.single()
+        assertEquals(Recurrence.WEEKLY, analysis.recurrence)
+        assertEquals("gym every Wednesday at 6pm", analysis.content)
     }
 
     @Test

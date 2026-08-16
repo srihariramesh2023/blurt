@@ -86,6 +86,14 @@ Rules:
   check (complete), `!` (error).
 - The orb is consistent across every screen that shows it (board checklist
   item 1): Home, Listening, Processing, empty and error states.
+- **The brand is the Blurt burst — one voice everywhere.** The launcher
+  icon, the in-app `BlurtLogo` (violet orb + white burst mark, fixed
+  brand colors `#9B7BFF → #5A45F2` across both themes), and the small
+  `BlurtMark` glyph are the same mark: three concentric arcs radiating
+  from a central dot, representing the moment a thought bursts forth.
+  Not a mic, not a speech bubble — the energy of expression. The
+  `BlurtWordmark` lockup (orb + "Blurt" in display type) heads the
+  splash, sign-in, and onboarding.
 
 ## 5. The consistent pattern
 
@@ -169,7 +177,10 @@ Shown once before sign-in (persisted):
 1. **Just talk.** / We'll organize it.
 2. **How it works** — 01 You talk · 02 We understand · 03 We organize.
 3. **Your thoughts. Your privacy.** — with the three promises.
-4. **Let Blurt listen** — mic permission, "We only listen when you tap the
+4. **Bring your own keys** — first install only: paste your own free Groq /
+   Gemini keys (optional — Continue works either way). Shown after the value
+   pages so a new user meets the product before the setup.
+5. **Let Blurt listen** — mic permission, "We only listen when you tap the
    orb."
 
 Continue / Get Started + page dots; no skip.
@@ -196,6 +207,22 @@ Continue / Get Started + page dots; no skip.
   capsule in the floating pill glides between positions.
 - **Reduce motion** — the OS setting swaps every spring/slide for a plain
   fade; looping indicators freeze into their static composition.
+
+## 12a. Companion reply (voice mode v1)
+
+The capture loop can talk back. After the user stops speaking, the orb goes
+**COMPLETE** and a short, warm line appears in a rounded surface bubble under
+it — the assistant acknowledging what was said and what it did ("Got it —
+Sarah, tomorrow at 3pm, saved with a reminder."). The line is spoken aloud
+with **Google's own TTS voice** (Gemini key, free tier — the same family as
+ChatGPT voice mode), falling back to the device TTS engine when no key is set
+or the network is down; a tap anywhere skips the utterance.
+
+Behavior: **auto-save** by default (the AI decides what's worth keeping); an
+explicit "don't save this" (or pure venting) produces a reply that
+acknowledges — and the transcript is dropped, never persisted. No buttons on
+the reply screen; the utterance itself drives the transition. The classic
+Save / Edit review remains for the no-Groq fallback path.
 
 ## 13. Sound & haptics
 

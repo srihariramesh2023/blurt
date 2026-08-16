@@ -28,12 +28,12 @@ class GroqCaptureAnalyzer(
     private val model: String,
 ) : CaptureAnalyzer {
 
-    override suspend fun analyze(content: String, nowEpochMillis: Long): CaptureAnalysis? =
+    override suspend fun analyze(content: String, nowEpochMillis: Long): List<CaptureAnalysis>? =
         withContext(Dispatchers.IO) {
             if (content.isBlank()) return@withContext null
             val apiKey = apiKeyProvider() ?: return@withContext null
             try {
-                val raw = post(content, nowEpochMillis, apiKey)
+                val raw = post(apiKey, AnalysisPrompt.build(content, nowEpochMillis))
                 val jsonText = extractContent(raw) ?: return@withContext null
                 CaptureAnalysisParser.parse(jsonText)
             } catch (e: Exception) {
@@ -42,8 +42,26 @@ class GroqCaptureAnalyzer(
             }
         }
 
-    private fun post(content: String, nowEpochMillis: Long, apiKey: String): String {
-        val prompt = AnalysisPrompt.build(content, nowEpochMillis)
+    /**
+     * The companion mode: one call returns the spoken reply, the save
+     * decision, and the structured blurts. Null when the analyzer can't run
+     * (no key, offline, quota) — the caller falls back to classic behavior.
+     */
+    override suspend fun analyzeWithReply(content: String, nowEpochMillis: Long): ConversationResult? =
+        withContext(Dispatchers.IO) {
+            if (content.isBlank()) return@withContext null
+            val apiKey = apiKeyProvider() ?: return@withContext null
+            try {
+                val raw = post(apiKey, AnalysisPrompt.buildWithReply(content, nowEpochMillis))
+                val jsonText = extractContent(raw) ?: return@withContext null
+                CaptureAnalysisParser.parseWithReply(jsonText)
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "analyzeWithReply failed: ${e::class.simpleName}: ${e.message}")
+                null
+            }
+        }
+
+    private fun post(apiKey: String, prompt: String): String {
 
         val body = JSONObject()
             .put("model", model)

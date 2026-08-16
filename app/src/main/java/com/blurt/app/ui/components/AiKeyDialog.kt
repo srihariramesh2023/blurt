@@ -115,7 +115,7 @@ fun AiKeyDialog(
                     savedTail = geminiSavedTail,
                     status = geminiStatus,
                     providerName = "Gemini",
-                    placeholder = "AIza…",
+                    placeholder = "AIza… or AQ.…",
                     onDraftChange = viewModel::onGeminiDraftChange,
                     onSaveAndCheck = viewModel::saveAndCheckGemini,
                     onRemove = viewModel::removeGeminiKey,
@@ -125,9 +125,9 @@ fun AiKeyDialog(
     }
 }
 
-/** One provider's key section inside the AI keys dialog. */
+/** One provider's key section — used by the AI keys dialog and the first-run BYOK onboarding page. */
 @Composable
-private fun AiKeySection(
+internal fun AiKeySection(
     title: String,
     icon: ImageVector,
     description: String,

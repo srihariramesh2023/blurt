@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [CaptureEntity::class, EmbeddingEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 @TypeConverters(
@@ -137,6 +137,18 @@ abstract class BlurtDatabase : RoomDatabase() {
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE captures ADD COLUMN completedAt INTEGER")
+            }
+        }
+
+        /**
+         * v8 → v9: `recurrence` — how a reminder repeats. Stores the
+         * Recurrence enum name ("DAILY" / "WEEKLY") or NULL for a one-shot;
+         * existing rows default to NULL (one-shot) and keep firing exactly
+         * as before.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE captures ADD COLUMN recurrence TEXT")
             }
         }
     }

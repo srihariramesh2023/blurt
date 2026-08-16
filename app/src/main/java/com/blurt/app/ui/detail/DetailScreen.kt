@@ -339,10 +339,17 @@ private fun DetailContent(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = capture.reminderAt?.let {
-                                "Today, ${TimeFormat.dayTime(it.toEpochMilli())}"
+                                val label = TimeFormat.recurrenceLabel(capture.recurrence, it.toEpochMilli())
+                                if (label != null) {
+                                    "$label · ${TimeFormat.dayTime(it.toEpochMilli())}"
+                                } else {
+                                    TimeFormat.dayTime(it.toEpochMilli())
+                                }
                             } ?: capture.type.label,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -502,7 +509,17 @@ private fun DetailContent(
                         )
                         Spacer(Modifier.weight(1f))
                         Text(
-                            text = if (done) "Done" else TimeFormat.dayTime(capture.reminderAt.toEpochMilli()),
+                            text = if (done) "Done" else {
+                                val label = TimeFormat.recurrenceLabel(
+                                    capture.recurrence,
+                                    capture.reminderAt.toEpochMilli(),
+                                )
+                                if (label != null) {
+                                    "$label · ${TimeFormat.dayTime(capture.reminderAt.toEpochMilli())}"
+                                } else {
+                                    TimeFormat.dayTime(capture.reminderAt.toEpochMilli())
+                                }
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (done) successColor() else MaterialTheme.colorScheme.primary,
                         )

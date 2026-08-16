@@ -40,7 +40,7 @@ class CategoryBackfiller(
             delay(DELAY_BETWEEN_CALLS_MS)
             val analysis = runCatching {
                 analyzer.analyze(capture.content, System.currentTimeMillis())
-            }.getOrNull()
+            }.getOrNull()?.firstOrNull()
             if (analysis == null) {
                 android.util.Log.w(TAG, "backfill: analyzer returned null for id=${capture.id}")
                 return@forEach

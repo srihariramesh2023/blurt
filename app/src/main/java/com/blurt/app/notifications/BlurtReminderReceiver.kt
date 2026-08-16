@@ -11,6 +11,7 @@ import com.blurt.app.BlurtApp
 import com.blurt.app.MainActivity
 import com.blurt.app.R
 import com.blurt.app.auth.AuthState
+import com.blurt.app.data.model.Recurrence
 import com.blurt.app.util.TimeFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,10 +44,78 @@ class BlurtReminderReceiver : BroadcastReceiver() {
             when (intent.action) {
                 ACTION_SNOOZE -> snooze(context, captureId)
                 ACTION_COMPLETE -> complete(context, captureId)
-                else -> postReminder(context, captureId, content = intent.getStringExtra(EXTRA_CONTENT).orEmpty())
+                ACTION_AUTO_DELETE -> autoDelete(context, captureId)
+                else -> onReminderFired(context, captureId, intent.getStringExtra(EXTRA_CONTENT).orEmpty())
             }
         } catch (t: Throwable) {
             android.util.Log.e(TAG, "receiver failed", t)
+        }
+    }
+
+    /**
+     * A one-shot reminder nobody acted on: delete the blurt for good (the
+     * user asked for one-time reminders to clean themselves up after their
+     * time passes), cancel its alarm so it can never re-fire, and dismiss the
+     * notification. Tombstoned locally — sync removes it everywhere.
+     */
+    private fun autoDelete(context: Context, captureId: Long) {
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val app = context.applicationContext as BlurtApp
+                val uid = (app.container.authRepository.authState.value as? AuthState.SignedIn)?.user?.uid
+                if (uid != null) {
+                    app.container.captureRepository.delete(captureId, uid)
+                }
+                app.container.reminderScheduler.cancel(captureId)
+            } finally {
+                dismiss(context, captureId)
+                pendingResult.finish()
+            }
+        }
+    }
+
+    /**
+     * A reminder alarm went off. For a recurring reminder this is also the
+     * heartbeat of the chain: advance to the next occurrence (same time of
+     * day / same weekday), persist it, and re-arm the alarm — so "every day"
+     * and "every Wednesday" keep firing without the user touching anything.
+     */
+    private fun onReminderFired(context: Context, captureId: Long, content: String) {
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val app = context.applicationContext as BlurtApp
+                val uid = (app.container.authRepository.authState.value as? AuthState.SignedIn)?.user?.uid
+                var text = content
+                var recurrence: Recurrence? = null
+                var fireTime = System.currentTimeMillis()
+                if (uid != null) {
+                    val capture = app.container.captureRepository.observeById(captureId, uid).first()
+                    if (capture != null) {
+                        text = capture.content
+                        recurrence = capture.recurrence
+                        fireTime = capture.reminderAt?.toEpochMilli() ?: System.currentTimeMillis()
+                        if (recurrence != Recurrence.NONE && capture.completedAt == null) {
+                            val nextAt = nextRecurringOccurrence(fireTime, recurrence)
+                            app.container.captureRepository.rescheduleReminder(captureId, uid, nextAt)
+                            app.container.reminderScheduler.schedule(captureId, capture.content, nextAt)
+                        } else if (recurrence == Recurrence.NONE && capture.completedAt == null) {
+                            // One-shot, nobody touched: clean itself up a
+                            // little while after it fires.
+                            app.container.reminderScheduler.scheduleAutoDelete(
+                                captureId,
+                                fireTime + AUTO_DELETE_AFTER_MS,
+                            )
+                        }
+                    }
+                }
+                postReminder(context, captureId, text, fireTime = fireTime, recurrence = recurrence)
+            } catch (t: Throwable) {
+                android.util.Log.e(TAG, "reminder fire failed", t)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
@@ -63,6 +132,9 @@ class BlurtReminderReceiver : BroadcastReceiver() {
                         val newAt = System.currentTimeMillis() + SNOOZE_MS
                         app.container.captureRepository.rescheduleReminder(captureId, uid, newAt)
                         app.container.reminderScheduler.schedule(captureId, capture.content, newAt)
+                        // Snooze defers the reminder — the auto-delete follows
+                        // the deferred fire, not the original one.
+                        app.container.reminderScheduler.cancelAutoDelete(captureId)
                         postReminder(context, captureId, capture.content, snoozedUntil = newAt)
                         return@launch
                     }
@@ -86,7 +158,10 @@ class BlurtReminderReceiver : BroadcastReceiver() {
                 if (uid != null) {
                     app.container.captureRepository.setCompleted(captureId, uid, completed = true)
                 }
+                // Done is an action taken — the blurt is kept as a completed
+                // record; no auto-delete.
                 app.container.reminderScheduler.cancel(captureId)
+                app.container.reminderScheduler.cancelAutoDelete(captureId)
             } finally {
                 dismiss(context, captureId)
                 pendingResult.finish()
@@ -105,6 +180,8 @@ class BlurtReminderReceiver : BroadcastReceiver() {
         captureId: Long,
         content: String,
         snoozedUntil: Long? = null,
+        fireTime: Long = System.currentTimeMillis(),
+        recurrence: Recurrence? = null,
     ) {
         android.util.Log.d(TAG, "postReminder id=$captureId content=$content")
         if (content.isBlank()) return
@@ -146,10 +223,11 @@ class BlurtReminderReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val title = if (snoozedUntil != null) {
-            "Snoozed until ${TimeFormat.full(snoozedUntil)}"
-        } else {
-            "You've got a Blurt"
+        val title = when {
+            snoozedUntil != null -> "Snoozed until ${TimeFormat.full(snoozedUntil)}"
+            recurrence == Recurrence.DAILY -> "Every day · ${TimeFormat.dayTime(fireTime)}"
+            recurrence == Recurrence.WEEKLY -> "Every ${TimeFormat.weekday(fireTime)} · ${TimeFormat.dayTime(fireTime)}"
+            else -> "You've got a Blurt"
         }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
@@ -171,8 +249,12 @@ class BlurtReminderReceiver : BroadcastReceiver() {
         const val EXTRA_CONTENT = "blurt.reminder.content"
         private const val ACTION_SNOOZE = "blurt.reminder.snooze"
         private const val ACTION_COMPLETE = "blurt.reminder.complete"
+        const val ACTION_AUTO_DELETE = "blurt.reminder.autoDelete"
         private const val SNOOZE_MS = 10 * 60_000L
         private const val CHANNEL_ID = "blurt_reminders"
+
+        /** How long a one-shot reminder lingers after firing before auto-delete. */
+        const val AUTO_DELETE_AFTER_MS = 6 * 60 * 60_000L
 
         /** Keeps the action request codes distinct from the alarm's (captureId). */
         private const val ACTION_OFFSET = 1_000_000

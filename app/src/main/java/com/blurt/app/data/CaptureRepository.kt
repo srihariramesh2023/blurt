@@ -8,6 +8,7 @@ import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.data.model.Recurrence
 import com.blurt.app.util.escapeLikePattern
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +55,7 @@ class CaptureRepository(
         intent: CaptureIntent? = null,
         reminderAt: Long? = null,
         isImportant: Boolean = false,
+        recurrence: Recurrence = Recurrence.NONE,
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
@@ -66,6 +68,7 @@ class CaptureRepository(
                 category = category?.name,
                 intent = intent?.name,
                 reminderAt = reminderAt,
+                recurrence = recurrence.takeIf { it != Recurrence.NONE }?.name,
                 isImportant = isImportant,
                 createdAt = now,
                 updatedAt = now,
@@ -130,4 +133,26 @@ class CaptureRepository(
     /** Future reminders of the user — the boot receiver reschedules these. */
     suspend fun getUpcomingReminders(ownerId: String): List<Capture> =
         dao.getUpcomingReminders(ownerId, System.currentTimeMillis()).map(CaptureEntity::toDomain)
+
+    /**
+     * Recurring reminders (past or future) — the boot receiver advances past
+     * occurrences to the next future one so the chain survives a reboot.
+     */
+    suspend fun getRecurringReminders(ownerId: String): List<Capture> =
+        dao.getRecurringReminders(ownerId).map(CaptureEntity::toDomain)
+
+    /**
+     * One-shot reminders that already fired but are still alive — the boot
+     * receiver re-arms their auto-delete alarm (cleared on reboot).
+     */
+    suspend fun getExpiredOneTimeReminders(ownerId: String): List<Capture> {
+        val now = System.currentTimeMillis()
+        return dao.getExpiredOneTimeReminders(ownerId, now, now - EXPIRED_LOOKBACK_MS)
+            .map(CaptureEntity::toDomain)
+    }
+
+    private companion object {
+        /** How far back an un-deleted one-shot reminder can be and still clean itself up. */
+        const val EXPIRED_LOOKBACK_MS = 7 * 24 * 60 * 60_000L
+    }
 }

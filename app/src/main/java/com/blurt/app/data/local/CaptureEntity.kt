@@ -7,6 +7,7 @@ import com.blurt.app.data.model.Capture
 import com.blurt.app.data.model.CaptureCategory
 import com.blurt.app.data.model.CaptureIntent
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.data.model.Recurrence
 import java.time.Instant
 
 /** Upload state of a capture relative to the backend. */
@@ -44,6 +45,11 @@ data class CaptureEntity(
     val intent: String? = null,
     /** When a priority Blurt notification was scheduled; null otherwise. */
     val reminderAt: Long? = null,
+    /**
+     * How the reminder repeats, stored as the Recurrence enum name; null =
+     * one-shot (never repeats).
+     */
+    val recurrence: String? = null,
     /** User/AI-marked important blurt — gold star in the lists. */
     val isImportant: Boolean = false,
     /** Hidden from the main lists; browsable in Library → Archived. */
@@ -74,6 +80,7 @@ fun CaptureEntity.toDomain(): Capture = Capture(
     // null stays null; an unknown stored name is ignored (not classified).
     intent = CaptureIntent.fromName(intent),
     reminderAt = reminderAt?.let(Instant::ofEpochMilli),
+    recurrence = Recurrence.fromName(recurrence),
     isImportant = isImportant,
     isArchived = isArchived,
     completedAt = completedAt?.let(Instant::ofEpochMilli),
@@ -90,6 +97,7 @@ fun Capture.toEntity(): CaptureEntity = CaptureEntity(
     category = category?.name,
     intent = intent?.name,
     reminderAt = reminderAt?.toEpochMilli(),
+    recurrence = recurrence.takeIf { it != Recurrence.NONE }?.name,
     isImportant = isImportant,
     isArchived = isArchived,
     completedAt = completedAt?.toEpochMilli(),

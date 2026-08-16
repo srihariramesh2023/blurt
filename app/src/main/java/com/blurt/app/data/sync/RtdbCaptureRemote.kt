@@ -38,6 +38,7 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                 "category" to capture.category,
                 "intent" to capture.intent,
                 "reminderAt" to capture.reminderAt,
+                "recurrence" to capture.recurrence,
                 "isImportant" to capture.isImportant,
                 "isArchived" to capture.isArchived,
                 "completedAt" to capture.completedAt,
@@ -70,6 +71,7 @@ class RtdbCaptureRemote(private val context: Context) : CaptureRemote {
                         intent = data["intent"] as? String,
                         reminderAt = (data["reminderAt"] as? Long)
                             ?: (data["reminderAt"] as? Number)?.toLong(),
+                        recurrence = data["recurrence"] as? String,
                         isImportant = (data["isImportant"] as? Boolean) ?: false,
                         isArchived = (data["isArchived"] as? Boolean) ?: false,
                         completedAt = (data["completedAt"] as? Long)

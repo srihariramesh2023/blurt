@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -18,11 +19,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -43,16 +46,26 @@ enum class OrbState {
     COMPLETE,
 }
 
+/** The brand's orb gradient — the launcher's own colors, one voice
+ *  everywhere: launcher, splash, sign-in, onboarding, home. */
+internal val BlurtBrandHighlight = Color(0xFFB9A3FF)
+internal val BlurtBrandMid = Color(0xFF9B7BFF)
+internal val BlurtBrandAccent = Color(0xFF7C5EF5)
+internal val BlurtBrandDeep = Color(0xFF5A45F2)
+internal val BlurtBrandShadow = Color(0xFF24136E)
+
 /**
  * The heart of Blurt V2 — the glowing violet orb. One component, four states,
  * consistent everywhere the board shows it (Home, Listening, Processing,
  * Complete, empty and error states).
  *
- * The orb is a violet radial gradient with a soft outer glow. The glow
- * breathes gently in idle ("calm, soft pulse" — the board's words), and the
- * disc accepts an icon (mic, stop, check, exclamation). Motion only ever
- * answers a state change; the reduce-motion fallback is a static glow with
- * the same composition.
+ * The orb is a lit glass sphere: the brand's radial gradient with a top-left
+ * light source, a specular catch, an ambient shadow at the bottom, a bright
+ * rim where light grazes the edge, and a slow sheen sweeping the glass while
+ * idle. The glow breathes gently in idle ("calm, soft pulse" — the board's
+ * words), and the disc accepts an icon (mic, stop, check, exclamation).
+ * Motion only ever answers a state change; the reduce-motion fallback is a
+ * static sphere with the same composition.
  */
 @Composable
 fun BlurtOrb(
@@ -82,17 +95,6 @@ fun BlurtOrb(
         OrbState.COMPLETE -> 0.85f
     }
 
-    // The violet gradient — the board's "glowing blue/purple gradient orb".
-    val orbBrush = Brush.radialGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-        ),
-        center = Offset(0.35f, 0.3f),
-        radius = 1.15f,
-    )
-
     Box(
         modifier = modifier
             .size(size)
@@ -111,8 +113,8 @@ fun BlurtOrb(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
-                            MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha * 0.35f),
+                            BlurtBrandMid.copy(alpha = glowAlpha),
+                            BlurtBrandMid.copy(alpha = glowAlpha * 0.35f),
                             Color.Transparent,
                         ),
                         center = Offset(0.5f, 0.5f),
@@ -133,38 +135,126 @@ fun BlurtOrb(
                     .size(discSize)
                     .blurtPressScale(source),
             ) {
-                OrbDisc(discSize = discSize, brush = orbBrush, icon = icon, contentDescription = contentDescription)
+                BlurtOrbDisc(
+                    discSize = discSize,
+                    icon = icon,
+                    contentDescription = contentDescription,
+                    sheen = state == OrbState.IDLE || state == OrbState.RECORDING,
+                )
             }
         } else {
-            OrbDisc(discSize = discSize, brush = orbBrush, icon = icon, contentDescription = contentDescription)
+            BlurtOrbDisc(
+                discSize = discSize,
+                icon = icon,
+                contentDescription = contentDescription,
+                sheen = state == OrbState.IDLE || state == OrbState.RECORDING,
+            )
         }
     }
 }
 
+/**
+ * The orb's disc — a lit glass sphere shared by [BlurtOrb] and the brand
+ * logo, so the mark is pixel-identical everywhere it appears.
+ *
+ * Layers, light source top-left: the brand radial gradient, a white specular
+ * catch, an ambient shadow at the bottom-right, a bright rim at the very
+ * edge (the light grazing the glass), and — when [sheen] — a slow light band
+ * sweeping across the sphere. The icon sits on top with a soft shadow.
+ */
 @Composable
-private fun OrbDisc(
+internal fun BlurtOrbDisc(
     discSize: Dp,
-    brush: Brush,
     icon: ImageVector?,
     contentDescription: String?,
+    sheen: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
+    val reduceMotion = rememberReduceMotion()
+    val infinite = rememberInfiniteTransition(label = "orbSheen")
+    val sheenRotation by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(8_000, easing = LinearEasing), RepeatMode.Restart),
+        label = "orbSheenRotation",
+    )
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(discSize)
             .clip(CircleShape)
-            .background(brush),
+            .drawBehind {
+                drawCircle(SphereBase)
+                drawCircle(SphereSpecular)
+                drawCircle(SphereShade)
+                drawCircle(SphereRim)
+                if (sheen && !reduceMotion) {
+                    rotate(degrees = sheenRotation) {
+                        drawRect(SphereSheen)
+                    }
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (icon != null) {
+            // The mark's soft shadow — a whisper of depth under the icon.
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.Black.copy(alpha = 0.18f),
+                modifier = Modifier
+                    .size(discSize * 0.46f)
+                    .offset(y = discSize * 0.02f),
+            )
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onPrimary,
+                tint = Color.White,
                 modifier = Modifier.size(discSize * 0.46f),
             )
         }
     }
 }
+
+/** The sphere's base — the brand gradient, lit from the top-left. */
+private val SphereBase = Brush.radialGradient(
+    colors = listOf(BlurtBrandHighlight, BlurtBrandMid, BlurtBrandAccent, BlurtBrandDeep),
+    center = Offset(0.38f, 0.34f),
+    radius = 1.1f,
+)
+
+/** The glass catch — a soft white bloom where the light hits. */
+private val SphereSpecular = Brush.radialGradient(
+    colors = listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0.08f), Color.Transparent),
+    center = Offset(0.30f, 0.24f),
+    radius = 0.62f,
+)
+
+/** Ambient occlusion — the sphere falls into shadow at the bottom-right. */
+private val SphereShade = Brush.radialGradient(
+    colors = listOf(Color.Transparent, BlurtBrandShadow.copy(alpha = 0.30f)),
+    center = Offset(0.66f, 0.78f),
+    radius = 0.95f,
+)
+
+/** The rim — a bright hairline at the very edge where light grazes glass. */
+private val SphereRim = Brush.radialGradient(
+    colorStops = arrayOf(
+        0f to Color.Transparent,
+        0.82f to Color.Transparent,
+        0.92f to Color.White.copy(alpha = 0.16f),
+        1f to Color.White.copy(alpha = 0.36f),
+    ),
+    center = Offset(0.5f, 0.5f),
+    radius = 0.5f,
+)
+
+/** The slow sheen — a soft light band sweeping the glass. */
+private val SphereSheen = Brush.linearGradient(
+    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.10f), Color.Transparent),
+    start = Offset(0f, 0f),
+    end = Offset(1f, 1f),
+)
 
 /**
  * The thin arc that orbits the orb while Blurt processes — a quiet,
@@ -195,8 +285,8 @@ fun OrbProcessingRing(size: Dp = 168.dp, modifier: Modifier = Modifier) {
                         colors = listOf(
                             Color.Transparent,
                             Color.Transparent,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                            BlurtBrandMid.copy(alpha = 0.9f),
+                            BlurtBrandMid.copy(alpha = 0.9f),
                             Color.Transparent,
                         ),
                     ),

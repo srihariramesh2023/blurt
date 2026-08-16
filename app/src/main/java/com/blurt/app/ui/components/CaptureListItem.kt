@@ -299,7 +299,15 @@ private fun subtitle(capture: Capture): String {
         TimeFormat.dayTime(capture.createdAt.toEpochMilli())
     }
     return when (capture.intent) {
-        CaptureIntent.TASK, CaptureIntent.REMINDER -> whenDone
+        CaptureIntent.TASK, CaptureIntent.REMINDER -> recurringSubtitle(capture, whenDone)
         else -> "${capture.type.label} · ${whenDone}"
     }
+}
+
+/** \"Every day · Tomorrow, 9:00 PM\" for a repeating future reminder. */
+private fun recurringSubtitle(capture: Capture, fallback: String): String {
+    val at = capture.reminderAt?.toEpochMilli() ?: return fallback
+    if (capture.completedAt != null || at <= System.currentTimeMillis()) return fallback
+    val label = TimeFormat.recurrenceLabel(capture.recurrence, at) ?: return fallback
+    return "$label · $fallback"
 }

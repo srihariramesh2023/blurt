@@ -164,6 +164,33 @@ class SyncEngineTest {
 
         assertTrue(remote.deleted.contains(remoteId))
         assertNull(dao.getByIdIncludingDeleted(id))
+        // And it must never come back — not in the library, not in search.
+        assertTrue(repository.observeAll(uid).first().isEmpty())
+    }
+
+    @Test
+    fun staleRemoteSnapshotNeverResurrectsALocallyDeletedBlurt() = runTest {
+        val id = repository.create(uid, CaptureType.TEXT, "delete me for real")
+        val remoteId = dao.getById(id, uid)!!.remoteId!!
+        engine.processOnce(uid, remote.observeAll(uid).first())
+
+        // The user deletes locally. The remote snapshot passed to the next
+        // pass is stale — it still carries the pre-delete doc, and the remote
+        // delete also bounces offline. The blurt must stay deleted.
+        repository.delete(id, uid)
+        remote.failNextDelete = true
+        engine.processOnce(uid, remote.observeAll(uid).first())
+
+        assertTrue(repository.observeAll(uid).first().isEmpty())
+        assertNotNull(dao.getByIdIncludingDeleted(id)) // still a tombstone
+
+        // The retry drains the delete; the stale doc still must not
+        // resurrect anything.
+        remote.failNextDelete = false
+        engine.processOnce(uid, remote.observeAll(uid).first())
+        assertTrue(remote.deleted.contains(remoteId))
+        assertTrue(repository.observeAll(uid).first().isEmpty())
+        assertNull(dao.getByIdIncludingDeleted(id))
     }
 
     @Test
@@ -191,6 +218,7 @@ private class FakeCaptureRemote : CaptureRemote {
     override val isConfigured: Boolean = true
 
     var failNextUpload = false
+    var failNextDelete = false
 
     val uploaded = mutableListOf<RemoteCapture>()
     val deleted = mutableListOf<String>()
@@ -207,6 +235,10 @@ private class FakeCaptureRemote : CaptureRemote {
     }
 
     override suspend fun deleteCapture(uid: String, remoteId: String) {
+        if (failNextDelete) {
+            failNextDelete = false
+            throw RuntimeException("backend unavailable")
+        }
         deleted += remoteId
         // Tombstone, matching the real backend: the doc stays visible as
         // deleted so other devices converge.

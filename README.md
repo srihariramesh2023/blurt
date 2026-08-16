@@ -189,17 +189,41 @@ Blurt ships **zero keys**: there is no build-time key plumbing at all, so a
 distributed APK contains no secret. Until a user brings their own keys in the
 app, blurts save unclassified and search falls back to keywords:
 
-- Tap the **avatar** (Home, top right) → **AI keys**.
+- **First install**: the onboarding flow includes a **Bring your own keys**
+  screen (shown once, after the value pages, before the mic permission) —
+  paste keys there or skip and continue.
+- Any time after: tap the **avatar** (Home, top right) → **AI keys**.
 - **Groq — classification**: paste a free key from <https://console.groq.com>
   and tap **Save & Check** — the app probes the provider live and shows
   *Connected*, *rejected*, or *unreachable*.
 - **Gemini — semantic search**: paste a free key from
   <https://aistudio.google.com/apikey> to activate the Gemini classification
-  fallback **and** meaning-based search.
+  fallback **and** meaning-based search. Keys come in two formats — the
+  classic `AIza…` traffic key and the newer `AQ.…` authentication key Google
+  now issues by default; both work, since Blurt calls Gemini's native API.
 - Both keys are stored **encrypted in the Android Keystore** (AES-256-GCM,
   never leave the device) and take effect on the next analysis — no rebuild
   or restart needed. The **Remove** button clears a key from the device and
   restores the unclassified/keyword-search behavior.
+
+### 4c. Talk to Blurt — the companion reply (v1)
+
+Voice capture is becoming a conversation. When a Groq key is active, the
+classifier returns a short **spoken reply** along with the analysis — the
+assistant acknowledges what you said and tells you what it did — spoken aloud
+with **Google's own TTS voice** via your saved Gemini key (free tier, natural
+voice, the same family as ChatGPT voice mode). With no Gemini key, or offline,
+it falls back to the device's built-in TTS so the reply is still spoken.
+
+- **Auto-save by default**: whatever the assistant decides is worth keeping is
+  saved immediately, reminders included — no confirm screen in the way.
+- **Say "don't save this"** (or "forget it", "just venting"…) and Blurt
+  acknowledges, saves nothing, and **drops the transcript entirely** — the
+  one assistant that forgets on purpose.
+- **Gemini-only / no key**: no reply is spoken and the classic review screen
+  (Save Blurt / Edit) still runs, so nothing silently changes for keyless
+  users.
+- A tap anywhere on the reply skips the utterance and moves on.
 
 ### 5. AI capture — categories and reminders
 

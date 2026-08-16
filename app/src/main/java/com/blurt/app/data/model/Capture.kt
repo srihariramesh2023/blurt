@@ -11,7 +11,8 @@ import java.time.Instant
  * [intent] is what the user meant — note, task, idea, reminder — from the
  * fixed [CaptureIntent] list (null until classified).
  * [reminderAt] is when a priority Blurt notification was scheduled for, or
- * null when no time was detected or the user declined.
+ * null when no time was detected or the user declined. [recurrence] says
+ * whether that reminder repeats (every day / every week).
  * [isImportant] marks blurts the user (or the AI, from phrasing like "don't
  * forget") called out as important; [isArchived] hides a blurt from the main
  * lists while keeping it browsable in Library → Archived; [completedAt] is
@@ -29,6 +30,8 @@ data class Capture(
     val category: CaptureCategory? = null,
     val intent: CaptureIntent? = null,
     val reminderAt: Instant? = null,
+    /** How the reminder repeats — NONE for a one-shot, DAILY/WEEKLY otherwise. */
+    val recurrence: Recurrence = Recurrence.NONE,
     val isImportant: Boolean = false,
     val isArchived: Boolean = false,
     val completedAt: Instant? = null,

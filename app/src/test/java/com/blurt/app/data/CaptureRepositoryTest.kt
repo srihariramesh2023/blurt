@@ -4,6 +4,7 @@ import androidx.room.Room
 import com.blurt.app.data.local.BlurtDatabase
 import com.blurt.app.data.local.SyncState
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.data.model.Recurrence
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -249,6 +250,29 @@ class CaptureRepositoryTest {
 
         assertNull(repository.observeById(id, alice).first()!!.completedAt)
         assertEquals(1, repository.getUpcomingReminders(alice).size)
+    }
+
+    @Test
+    fun expiredOneTimeReminders_returnsOnlyUncompletedFiredOneShots() = runTest {
+        // One-shot that already fired and nobody acted on — must be found for
+        // auto-delete re-arming after a reboot.
+        val expired = repository.create(alice, CaptureType.TEXT, "missed", reminderAt = future(-3_600_000L))
+        // Future one-shot — not expired yet.
+        repository.create(alice, CaptureType.TEXT, "upcoming", reminderAt = future())
+        // Recurring past reminder — repeats, never auto-deleted.
+        repository.create(
+            alice,
+            CaptureType.TEXT,
+            "daily",
+            reminderAt = future(-3_600_000L),
+            recurrence = Recurrence.DAILY,
+        )
+        // Completed one-shot — the user acted; keep it.
+        val done = repository.create(alice, CaptureType.TEXT, "done", reminderAt = future(-3_600_000L))
+        repository.setCompleted(done, alice, completed = true)
+
+        val expiredList = repository.getExpiredOneTimeReminders(alice)
+        assertEquals(listOf(expired), expiredList.map { it.id })
     }
 
     @Test

@@ -77,8 +77,11 @@ class SyncEngine(
      */
     internal suspend fun processOnce(uid: String, remoteDocs: List<RemoteCapture>) {
         dao.getPendingUploads(uid).forEach { upload(uid, it) }
-        dao.getPendingDeletes(uid).forEach { drainDelete(uid, it) }
+        // Merge before draining deletes: while a tombstone still exists it
+        // blocks a stale remote doc from resurrecting the row. Once the
+        // remote delete is confirmed the row is hard-deleted for good.
         mergeRemote(uid, remoteDocs)
+        dao.getPendingDeletes(uid).forEach { drainDelete(uid, it) }
     }
 
     private suspend fun upload(uid: String, capture: CaptureEntity) {
@@ -95,6 +98,7 @@ class SyncEngine(
                     category = capture.category,
                     intent = capture.intent,
                     reminderAt = capture.reminderAt,
+                    recurrence = capture.recurrence,
                     isImportant = capture.isImportant,
                     isArchived = capture.isArchived,
                     completedAt = capture.completedAt,
@@ -121,11 +125,17 @@ class SyncEngine(
     }
 
     private suspend fun mergeRemote(uid: String, remoteDocs: List<RemoteCapture>) {
-        val localActive = dao.getAllActive(uid).associateBy { it.remoteId }
+        // Tombstones included: a row the user deleted locally must never be
+        // mistaken for "missing" and re-inserted from a stale remote snapshot.
+        val localByRemoteId = dao.getAllIncludingDeleted(uid).associateBy { it.remoteId }
 
         for (remoteCapture in remoteDocs) {
-            val local = localActive[remoteCapture.remoteId]
+            val local = localByRemoteId[remoteCapture.remoteId]
             when {
+                // A local tombstone means the user deleted it — the local
+                // delete wins, exactly like a PENDING local edit does.
+                local?.deletedAt != null -> Unit
+
                 // Deletions are explicit tombstones from another device.
                 remoteCapture.deleted -> {
                     if (local != null && local.syncState != SyncState.PENDING) {
@@ -148,6 +158,7 @@ class SyncEngine(
                         category = remoteCapture.category,
                         intent = remoteCapture.intent,
                         reminderAt = remoteCapture.reminderAt,
+                        recurrence = remoteCapture.recurrence,
                         isImportant = remoteCapture.isImportant,
                         isArchived = remoteCapture.isArchived,
                         completedAt = remoteCapture.completedAt,
@@ -174,6 +185,7 @@ private fun RemoteCapture.toEntity(ownerId: String): CaptureEntity = CaptureEnti
     category = category,
     intent = intent,
     reminderAt = reminderAt,
+    recurrence = recurrence,
     isImportant = isImportant,
     isArchived = isArchived,
     completedAt = completedAt,

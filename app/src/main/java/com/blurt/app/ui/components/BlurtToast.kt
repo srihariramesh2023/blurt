@@ -46,7 +46,7 @@ import kotlinx.coroutines.delay
 fun BlurtToast(
     message: String,
     onDismissed: () -> Unit,
-    durationMs: Long = 2_800L,
+    durationMs: Long = 1_700L,
     modifier: Modifier = Modifier,
 ) {
     var visible by remember { mutableStateOf(false) }
@@ -55,7 +55,7 @@ fun BlurtToast(
         visible = true
         delay(durationMs)
         visible = false
-        delay(if (reduceMotion) 180L else 420L)
+        delay(if (reduceMotion) 150L else 240L)
         onDismissed()
     }
 
@@ -94,6 +94,10 @@ fun BlurtToast(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White,
+                    // A long blurt must never blow the pill up — cap it and
+                    // ellipsize so the toast stays a toast.
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
         }

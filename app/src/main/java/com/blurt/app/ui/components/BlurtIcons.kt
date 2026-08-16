@@ -13,14 +13,26 @@ import com.blurt.app.data.model.CaptureType
  */
 object BlurtIcons {
 
-    /** Rounded speech bubble with a spark — the Blurt mark. */
+    /** The mic glyph — used for voice actions. */
+    private const val MIC_PATH =
+        "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" +
+            "M17.91 11c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85" +
+            "-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43" +
+            "5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"
+
+    /**
+     * The Blurt burst — three concentric arcs radiating from a central
+     * dot, representing the moment a thought bursts forth. Unique to
+     * Blurt: not a mic, not a speech bubble — the energy of expression.
+     */
+    private const val BURST_PATH =
+        "M12 10 A2 2 0 1 1 12 14 A2 2 0 1 1 12 10 Z" +  // central dot
+            "M15 12 A3 3 0 0 1 12 15 L12 13 A1 1 0 0 0 13 12 Z" +  // arc 1 (inner)
+            "M18 12 A6 6 0 0 1 12 18 L12 16 A4 4 0 0 0 16 12 Z" +  // arc 2 (middle)
+            "M21 12 A9 9 0 0 1 12 21 L12 19 A7 7 0 0 0 19 12 Z"     // arc 3 (outer)
+
     val BlurtMark: ImageVector by lazy {
-        icon(
-            name = "BlurtMark",
-            pathData = "M12 3C6.48 3 2 6.58 2 11c0 2.52 1.35 4.76 3.42 6.23L4 21l4.05-1.5" +
-                "c1.24.35 2.57.5 3.95.5 5.52 0 10-3.58 10-8s-4.48-8-10-8z" +
-                "M12 8.5l1.35 2.65L16 12.5l-2.65 1.35L12 16.5l-1.35-2.65L8 12.5l2.65-1.35L12 8.5z",
-        )
+        icon(name = "BlurtMark", pathData = BURST_PATH)
     }
 
     /** Quote glyph for text captures. */
@@ -85,13 +97,7 @@ object BlurtIcons {
 
     /** Microphone — the heart of V2. */
     val Mic: ImageVector by lazy {
-        icon(
-            name = "Mic",
-            pathData = "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" +
-                "M17.91 11c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85" +
-                "-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43" +
-                "5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z",
-        )
+        icon(name = "Mic", pathData = MIC_PATH)
     }
 
     /** Filled star — the important marker. */

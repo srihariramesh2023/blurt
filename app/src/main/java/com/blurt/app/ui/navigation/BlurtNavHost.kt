@@ -131,8 +131,7 @@ fun BlurtNavHost(
         composable(BlurtRoutes.HOME) {
             HomeScreen(
                 user = user,
-                onVoice = { navController.navigate(BlurtRoutes.VOICE) },
-                onCapture = { navController.navigate(BlurtRoutes.capture()) },
+                onCapture = { text -> navController.navigate(BlurtRoutes.capture(text)) },
                 onSearch = { navController.navigate(BlurtRoutes.SEARCH) },
                 onOpenProfile = { navController.navigate(BlurtRoutes.SETTINGS) },
             )

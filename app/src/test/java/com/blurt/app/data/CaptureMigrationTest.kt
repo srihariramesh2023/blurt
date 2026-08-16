@@ -6,6 +6,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import com.blurt.app.data.local.BlurtDatabase
+import com.blurt.app.data.local.toEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -148,6 +149,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
                 BlurtDatabase.MIGRATION_7_8,
+                BlurtDatabase.MIGRATION_8_9,
             )
             .build()
         val repository = CaptureRepository(database.captureDao())
@@ -199,6 +201,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
                 BlurtDatabase.MIGRATION_7_8,
+                BlurtDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -258,6 +261,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
                 BlurtDatabase.MIGRATION_7_8,
+                BlurtDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -320,6 +324,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
                 BlurtDatabase.MIGRATION_7_8,
+                BlurtDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -357,6 +362,7 @@ class CaptureMigrationTest {
                 BlurtDatabase.MIGRATION_5_6,
                 BlurtDatabase.MIGRATION_6_7,
                 BlurtDatabase.MIGRATION_7_8,
+                BlurtDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -431,7 +437,7 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_6_7, BlurtDatabase.MIGRATION_7_8)
+            .addMigrations(BlurtDatabase.MIGRATION_6_7, BlurtDatabase.MIGRATION_7_8, BlurtDatabase.MIGRATION_8_9)
             .build()
 
         // Existing rows survive with their analysis, defaulting to unset flags.
@@ -502,7 +508,7 @@ class CaptureMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
-            .addMigrations(BlurtDatabase.MIGRATION_7_8)
+            .addMigrations(BlurtDatabase.MIGRATION_7_8, BlurtDatabase.MIGRATION_8_9)
             .build()
 
         // Existing rows survive, not done, with all v7 analysis intact.
@@ -526,6 +532,73 @@ class CaptureMigrationTest {
         dao.setCompletedAt(capture.id, "uid-existing-user", null, 2001L)
         assertNull(repo.observeById(capture.id, "uid-existing-user").first()!!.completedAt)
         assertEquals(1, dao.getUpcomingReminders("uid-existing-user", 0L).size)
+
+        database.close()
+    }
+
+    private fun v8Schema() = createDatabaseAt(8) {
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `captures` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`ownerId` TEXT, " +
+                "`remoteId` TEXT, " +
+                "`syncState` TEXT NOT NULL DEFAULT 'PENDING', " +
+                "`content` TEXT NOT NULL, " +
+                "`type` TEXT NOT NULL, " +
+                "`category` TEXT, " +
+                "`intent` TEXT, " +
+                "`reminderAt` INTEGER, " +
+                "`isImportant` INTEGER NOT NULL DEFAULT 0, " +
+                "`isArchived` INTEGER NOT NULL DEFAULT 0, " +
+                "`completedAt` INTEGER, " +
+                "`deletedAt` INTEGER, " +
+                "`createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_ownerId ON captures(ownerId)")
+        execSQL("CREATE INDEX IF NOT EXISTS index_captures_syncState ON captures(syncState)")
+        execSQL(
+            "CREATE TABLE IF NOT EXISTS `capture_embeddings` (" +
+                "`captureId` INTEGER NOT NULL PRIMARY KEY, " +
+                "`ownerId` TEXT NOT NULL, " +
+                "`embedding` BLOB NOT NULL, " +
+                "`model` TEXT NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL)"
+        )
+        execSQL(
+            "INSERT INTO `captures` (ownerId, remoteId, syncState, content, type, category, intent, reminderAt, isImportant, isArchived, completedAt, createdAt, updatedAt) " +
+                "VALUES ('uid-existing-user', 'remote-1', 'SYNCED', 'one-shot reminder', 'TEXT', 'HEALTH', 'REMINDER', 5000, 0, 0, NULL, 1000, 1000)"
+        )
+    }
+
+    @Test
+    fun migrate8To9_addsRecurrenceColumnKeepsRows() = runTest {
+        v8Schema().use { v8 ->
+            BlurtDatabase.MIGRATION_8_9.migrate(v8)
+            v8.version = 9
+        }
+
+        val database = Room.databaseBuilder(context, BlurtDatabase::class.java, dbName)
+            .addMigrations(BlurtDatabase.MIGRATION_8_9)
+            .build()
+
+        // Existing rows survive; one-shots read back as NONE recurrence.
+        val repo = CaptureRepository(database.captureDao())
+        val all = repo.observeAll("uid-existing-user").first()
+        assertEquals(1, all.size)
+        val capture = all.single()
+        assertEquals("one-shot reminder", capture.content)
+        assertEquals(com.blurt.app.data.model.CaptureIntent.REMINDER, capture.intent)
+        assertEquals(com.blurt.app.data.model.Recurrence.NONE, capture.recurrence)
+
+        // The new column is queryable — a recurrence can be written and read
+        // back, and the recurring-reminders query finds it.
+        val dao = database.captureDao()
+        dao.update(capture.toEntity().copy(recurrence = "DAILY"))
+        val updated = repo.observeById(capture.id, "uid-existing-user").first()!!
+        assertEquals(com.blurt.app.data.model.Recurrence.DAILY, updated.recurrence)
+        assertEquals(1, dao.getRecurringReminders("uid-existing-user").size)
+        assertEquals(0, dao.getRecurringReminders("other-user").size)
 
         database.close()
     }

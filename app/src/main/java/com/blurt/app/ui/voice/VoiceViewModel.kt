@@ -14,11 +14,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.blurt.app.BlurtApp
 import com.blurt.app.ai.CaptureAnalysis
+import com.blurt.app.ai.CaptureAnalysisParser
 import com.blurt.app.ai.CaptureAnalyzer
 import com.blurt.app.auth.AuthState
 import com.blurt.app.data.CaptureRepository
 import com.blurt.app.data.model.CaptureType
+import com.blurt.app.data.model.Recurrence
 import com.blurt.app.notifications.ReminderScheduler
+import com.blurt.app.ui.components.BlurtTts
 import com.blurt.app.util.isHttpUrl
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,6 +40,12 @@ enum class VoicePhase {
 
     /** Speech finished; Blurt is organizing (the board's checklist). */
     ANALYZING,
+
+    /**
+     * The companion speaks back — a short line acknowledging what was said
+     * and what Blurt did. Auto-advances when the utterance ends.
+     */
+    REPLYING,
 
     /** The AI failed to classify — Try Again / Save as Note / Type instead. */
     ERROR,
@@ -65,6 +74,7 @@ class VoiceViewModel(
     private val analyzer: CaptureAnalyzer?,
     private val reminderScheduler: ReminderScheduler?,
     private val authState: StateFlow<AuthState>,
+    private val tts: BlurtTts? = null,
 ) : ViewModel() {
 
     private val _phase = MutableStateFlow(VoicePhase.IDLE)
@@ -77,6 +87,17 @@ class VoiceViewModel(
     /** Full analysis once speech stops; null means \"save unclassified\". */
     private val _analysis = MutableStateFlow<CaptureAnalysis?>(null)
     val analysis: StateFlow<CaptureAnalysis?> = _analysis.asStateFlow()
+
+    /**
+     * All distinct blurts the analyzer found — usually one, several when a
+     * long capture held multiple ideas. Each is saved as its own blurt so
+     * nothing gets forgotten.
+     */
+    private var pendingAnalyses: List<CaptureAnalysis> = emptyList()
+
+    /** How many blurts the last save created — the toast says \"3 blurts saved\". */
+    private val _savedCount = MutableStateFlow(1)
+    val savedCount: StateFlow<Int> = _savedCount.asStateFlow()
 
     /** Progressive understanding shown *while* the user is still speaking. */
     private val _progressive = MutableStateFlow<CaptureAnalysis?>(null)
@@ -101,9 +122,22 @@ class VoiceViewModel(
     private val _saved = MutableStateFlow<Long?>(null)
     val saved: StateFlow<Long?> = _saved.asStateFlow()
 
+    /** What was actually saved — the reminder that really got scheduled, if any.
+     *  Drives the confirmation message so "Save without reminder" never claims
+     *  a reminder. */
+    private val _savedReminderAt = MutableStateFlow<Long?>(null)
+    val savedReminderAt: StateFlow<Long?> = _savedReminderAt.asStateFlow()
+
     /** Set when the user taps Edit — the screen navigates to the composer. */
     private val _editRequested = MutableStateFlow(false)
     val editRequested: StateFlow<Boolean> = _editRequested.asStateFlow()
+
+    /** The companion's spoken line — shown on screen while it's spoken. */
+    private val _reply = MutableStateFlow<String?>(null)
+    val reply: StateFlow<String?> = _reply.asStateFlow()
+
+    /** The companion's save decision, applied when its reply finishes. */
+    private var pendingSave = true
 
     private var recognizer: SpeechRecognizer? = null
     private var progressiveJob: Job? = null
@@ -136,6 +170,9 @@ class VoiceViewModel(
         _transcript.value = ""
         _level.value = 0f
         _phase.value = VoicePhase.LISTENING
+        // Warm the fallback engine now so a no-key reply doesn't pay its
+        // cold start later.
+        tts?.warmUp()
 
         val speech = SpeechRecognizer.createSpeechRecognizer(context)
         speech.setRecognitionListener(listener)
@@ -157,6 +194,7 @@ class VoiceViewModel(
 
     /** Discard the recording and go back to the idle mic. */
     fun cancel() {
+        tts?.stop()
         recognizer?.cancel()
         reset()
     }
@@ -174,38 +212,140 @@ class VoiceViewModel(
     private fun saveWithReminder(keepReminder: Boolean) {
         val content = _transcript.value.trim()
         if (content.isBlank() || _phase.value != VoicePhase.CONFIRM) return
+        // One blurt per distinct idea the analyzer found (usually one). If it
+        // couldn't classify, the whole recording saves as a single note.
+        val analyses = if (_analysis.value == null) {
+            emptyList()
+        } else {
+            pendingAnalyses.ifEmpty { listOf(_analysis.value!!) }
+        }
+        val blurts = if (analyses.isEmpty()) {
+            listOf(
+                SaveBlurt(
+                    content = content,
+                    category = null,
+                    intent = null,
+                    reminderAt = null,
+                    important = false,
+                    recurrence = Recurrence.NONE,
+                )
+            )
+        } else {
+            analyses.map { a ->
+                SaveBlurt(
+                    content = a.content?.takeIf { it.isNotBlank() } ?: content,
+                    category = a.category,
+                    intent = a.intent,
+                    reminderAt = if (keepReminder) {
+                        a.reminderAt?.takeIf { it > System.currentTimeMillis() }
+                    } else null,
+                    important = a.important,
+                    recurrence = a.recurrence,
+                )
+            }
+        }
+        persist(blurts)
+    }
+
+    /**
+     * The companion path: the reply has been spoken, the save decision is
+     * in. Save the blurts it found, or drop the transcript entirely when it
+     * decided nothing was worth keeping.
+     */
+    private fun finishReply() {
+        if (_phase.value != VoicePhase.REPLYING) return
+        if (pendingSave && pendingAnalyses.isNotEmpty()) {
+            autoSave()
+        } else {
+            // Nothing worth keeping — the transcript is dropped, not saved.
+            reset()
+        }
+    }
+
+    /** Tap-to-skip: stop the spoken reply and move on now. */
+    fun skipReply() {
+        tts?.stop()
+        finishReply()
+    }
+
+    private fun autoSave() {
+        val content = _transcript.value.trim()
+        if (content.isBlank() || pendingAnalyses.isEmpty()) return
+        val blurts = pendingAnalyses.map { a ->
+            SaveBlurt(
+                content = a.content?.takeIf { it.isNotBlank() } ?: content,
+                category = a.category,
+                intent = a.intent,
+                reminderAt = a.reminderAt?.takeIf { it > System.currentTimeMillis() },
+                important = a.important,
+                recurrence = a.recurrence,
+            )
+        }
+        persist(blurts)
+    }
+
+    /** The actual database writes — shared by the confirm and auto-save paths. */
+    private fun persist(blurts: List<SaveBlurt>) {
+        val content = _transcript.value.trim()
+        if (content.isBlank()) return
         val uid = (authState.value as? AuthState.SignedIn)?.user?.uid
         if (uid == null) {
             _error.value = "You need to be signed in to save."
             return
         }
-        val analysis = _analysis.value
-        val reminderAt = if (keepReminder) analysis?.reminderAt?.takeIf { it > System.currentTimeMillis() } else null
-        val type = if (content.isHttpUrl()) CaptureType.LINK else CaptureType.TEXT
-
         viewModelScope.launch {
-            val id = runCatching {
-                repository.create(
-                    ownerId = uid,
-                    type = type,
-                    content = content,
-                    category = analysis?.category,
-                    intent = analysis?.intent,
-                    reminderAt = reminderAt,
-                    isImportant = analysis?.important ?: false,
-                )
-            }.getOrElse {
-                _error.value = "Couldn't save. Try again."
-                return@launch
+            // Guard against the model returning the same fragment twice.
+            val seen = mutableSetOf<String>()
+            val distinct = blurts.filter { b -> seen.add(b.content.lowercase().trim()) }
+            val ids = mutableListOf<Long>()
+            var firstReminderAt: Long? = null
+            for (blurt in distinct) {
+                val id = runCatching {
+                    repository.create(
+                        ownerId = uid,
+                        type = if (blurt.content.isHttpUrl()) CaptureType.LINK else CaptureType.TEXT,
+                        content = blurt.content,
+                        category = blurt.category,
+                        intent = blurt.intent,
+                        reminderAt = blurt.reminderAt,
+                        isImportant = blurt.important,
+                        recurrence = blurt.recurrence,
+                    )
+                }.getOrElse {
+                    _error.value = "Couldn't save. Try again."
+                    return@launch
+                }
+                ids += id
+                if (blurt.reminderAt != null) {
+                    reminderScheduler?.schedule(id, blurt.content, blurt.reminderAt)
+                    if (firstReminderAt == null) firstReminderAt = blurt.reminderAt
+                }
             }
-            if (reminderAt != null) reminderScheduler?.schedule(id, content, reminderAt)
+            _savedReminderAt.value = firstReminderAt
+            _savedCount.value = ids.size
             _phase.value = VoicePhase.SAVED
-            _saved.value = id
+            _saved.value = ids.first()
         }
     }
 
+    /** One blurt's worth of save data — what actually hits the database. */
+    private data class SaveBlurt(
+        val content: String,
+        val category: com.blurt.app.data.model.CaptureCategory?,
+        val intent: com.blurt.app.data.model.CaptureIntent?,
+        val reminderAt: Long?,
+        val important: Boolean,
+        val recurrence: Recurrence,
+    )
+
     fun onSavedHandled() {
         _saved.value = null
+    }
+
+    /** "Done" after the saved toast — back to the resting orb (in-place flows). */
+    fun dismissSaved() {
+        _saved.value = null
+        reset()
     }
 
     /** \"Edit\" — hand the transcript to the composer, pre-filled. */
@@ -226,10 +366,15 @@ class VoiceViewModel(
         _phase.value = VoicePhase.IDLE
         _transcript.value = ""
         _analysis.value = null
+        pendingAnalyses = emptyList()
+        pendingSave = true
+        _savedCount.value = 1
         _progressive.value = null
+        _reply.value = null
         _level.value = 0f
         _error.value = null
         _notice.value = null
+        _savedReminderAt.value = null
     }
 
     private fun onTranscript(text: String) {
@@ -242,7 +387,7 @@ class VoiceViewModel(
                 delay(PROGRESSIVE_DEBOUNCE_MS)
                 val analysis = runCatching {
                     analyzer.analyze(text, System.currentTimeMillis())
-                }.getOrNull()
+                }.getOrNull()?.firstOrNull()
                 if (_phase.value == VoicePhase.LISTENING) _progressive.value = analysis
             }
         }
@@ -261,16 +406,51 @@ class VoiceViewModel(
         _phase.value = VoicePhase.ANALYZING
         viewModelScope.launch {
             val result = runCatching {
-                analyzer?.analyze(text, System.currentTimeMillis())
-            }
-            if (analyzer != null && result.isFailure) {
+                analyzer?.analyzeWithReply(text, System.currentTimeMillis())
+            }.getOrNull()
+            if (analyzer != null && result == null) {
                 // The board's error state — a snag while classifying, with
-                // Try Again / Save as Note as the escape hatches.
-                _analysis.value = null
+                // Try Again / Save as Note as the escape hatches. Even here
+                // the text can still carry a reminder, so the fallback keeps
+                // it.
+                val local = listOfNotNull(CaptureAnalysisParser.localFallback(text))
+                if (local.isNotEmpty()) {
+                    pendingAnalyses = local
+                    _analysis.value = local.first()
+                    _progressive.value = null
+                    _phase.value = VoicePhase.CONFIRM
+                } else {
+                    _analysis.value = null
+                    pendingAnalyses = emptyList()
+                    _progressive.value = null
+                    _phase.value = VoicePhase.ERROR
+                }
+            } else if (result != null && result.reply != null) {
+                // Companion mode: one call answered with a spoken line and a
+                // save decision. Speak the reply; when it finishes, auto-save
+                // the blurts or drop the transcript entirely.
+                pendingAnalyses = result.analyses
+                pendingSave = result.save
+                _analysis.value = result.analyses.firstOrNull()
                 _progressive.value = null
-                _phase.value = VoicePhase.ERROR
+                _reply.value = result.reply
+                _phase.value = VoicePhase.REPLYING
+                val t = tts
+                if (t != null) {
+                    t.speak(result.reply, ::finishReply)
+                } else {
+                    // No engine (shouldn't happen in the app) — don't stall.
+                    viewModelScope.launch { delay(REPLY_PAUSE_MS); finishReply() }
+                }
             } else {
-                _analysis.value = result.getOrNull()
+                // No companion reply (Gemini fallback / no key) → the classic
+                // review. The text's own words still decide times and
+                // recurrences ("tomorrow at 9pm" must ask for a reminder even
+                // with zero AI).
+                val analyses = result?.analyses.orEmpty()
+                    .ifEmpty { listOfNotNull(CaptureAnalysisParser.localFallback(text)) }
+                pendingAnalyses = analyses
+                _analysis.value = analyses.firstOrNull()
                 _progressive.value = null
                 _phase.value = VoicePhase.CONFIRM
             }
@@ -287,9 +467,20 @@ class VoiceViewModel(
                 analyzer?.analyze(text, System.currentTimeMillis())
             }
             if (analyzer != null && result.isFailure) {
-                _phase.value = VoicePhase.ERROR
+                val local = listOfNotNull(CaptureAnalysisParser.localFallback(text))
+                if (local.isNotEmpty()) {
+                    pendingAnalyses = local
+                    _analysis.value = local.first()
+                    _progressive.value = null
+                    _phase.value = VoicePhase.CONFIRM
+                } else {
+                    _phase.value = VoicePhase.ERROR
+                }
             } else {
-                _analysis.value = result.getOrNull()
+                val analyses = result.getOrNull().orEmpty()
+                    .ifEmpty { listOfNotNull(CaptureAnalysisParser.localFallback(text)) }
+                pendingAnalyses = analyses
+                _analysis.value = analyses.firstOrNull()
                 _progressive.value = null
                 _phase.value = VoicePhase.CONFIRM
             }
@@ -322,6 +513,9 @@ class VoiceViewModel(
                 return@launch
             }
             _analysis.value = null
+            pendingAnalyses = emptyList()
+            _savedReminderAt.value = null
+            _savedCount.value = 1
             _phase.value = VoicePhase.SAVED
             _saved.value = id
         }
@@ -383,6 +577,7 @@ class VoiceViewModel(
 
     override fun onCleared() {
         progressiveJob?.cancel()
+        tts?.shutdown()
         recognizer?.destroy()
         recognizer = null
     }
@@ -390,6 +585,8 @@ class VoiceViewModel(
     companion object {
         private const val PROGRESSIVE_DEBOUNCE_MS = 900L
         private const val PROGRESSIVE_MIN_WORDS = 3
+        /** How long to hold the reply on screen when no TTS engine exists. */
+        private const val REPLY_PAUSE_MS = 1_200L
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -400,6 +597,12 @@ class VoiceViewModel(
                     analyzer = app.container.captureAnalyzer,
                     reminderScheduler = app.container.reminderScheduler,
                     authState = app.container.authRepository.authState,
+                    tts = BlurtTts(
+                        context = app,
+                        geminiKeyProvider = { app.container.aiKeyStore.geminiKey() },
+                        packageName = app.packageName,
+                        certSha1 = app.container.signingCertSha1(app),
+                    ),
                 )
             }
         }

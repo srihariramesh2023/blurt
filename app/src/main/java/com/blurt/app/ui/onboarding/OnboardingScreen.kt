@@ -14,6 +14,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -47,8 +49,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.blurt.app.ui.components.AiKeySection
+import com.blurt.app.ui.components.AiKeyViewModel
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtOrb
+import com.blurt.app.ui.components.BlurtWordmark
 import com.blurt.app.ui.components.OrbState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
@@ -58,19 +65,25 @@ import com.blurt.app.ui.theme.BlurtSpacing
 import com.blurt.app.ui.theme.rememberReduceMotion
 
 /**
- * The V2 onboarding — three quiet value pages, then the mic permission.
- * Exactly the board's flow: 01 Just talk · 02 How it works · 03 Privacy,
- * then "Let Blurt listen". Skip is never offered — the pages are short and
- * the value is the product.
+ * The V2 onboarding — three quiet value pages first, then the BYOK screen,
+ * then the mic permission. Shown only on first run (never again once
+ * completed), so the bring-your-own-key screen appears exactly once, after
+ * the value pitch: 00 Just talk · 01 How it works · 02 Privacy · 03 Bring
+ * your own keys, then "Let Blurt listen". The simple pages come first so a
+ * brand-new user is never bombarded with the complex key step. Skip is
+ * never offered — the pages are short and the value is the product (keys
+ * stay optional: without them blurts save unclassified and search falls
+ * back to keywords).
  */
 @Composable
 fun OnboardingScreen(
     onComplete: () -> Unit,
+    aiKeyViewModel: AiKeyViewModel = viewModel(factory = AiKeyViewModel.Factory),
 ) {
     val context = LocalContext.current
     val reduceMotion = rememberReduceMotion()
     var page by rememberSaveable { mutableIntStateOf(0) }
-    val lastPage = 3 // 0..2 content, 3 = permissions
+    val lastPage = 4 // 0..3 content, 4 = permissions
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -88,6 +101,8 @@ fun OnboardingScreen(
             .padding(horizontal = BlurtSpacing.screen),
     ) {
         Spacer(Modifier.height(BlurtSpacing.l))
+        BlurtWordmark(markSize = 36.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Spacer(Modifier.height(BlurtSpacing.xl))
         AnimatedContent(
             targetState = page,
             transitionSpec = {
@@ -108,10 +123,11 @@ fun OnboardingScreen(
                     title = "Just talk.",
                     subtitle = "We'll organize it.",
                     body = "Blurt turns your messy thoughts into tasks, reminders, and notes automatically.",
-                    icon = BlurtIcons.Mic,
+                    icon = BlurtIcons.BlurtMark,
                 )
                 1 -> HowItWorksPage()
                 2 -> PrivacyPage()
+                3 -> ByokPage(aiKeyViewModel = aiKeyViewModel)
                 else -> PermissionPage(
                     onAllow = {
                         if (needsMic(context)) {
@@ -134,7 +150,7 @@ fun OnboardingScreen(
         Spacer(Modifier.height(BlurtSpacing.l))
         // Continue / Get Started + the quiet page dots.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PageDots(count = 4, current = page)
+            PageDots(count = 5, current = page)
             Spacer(Modifier.weight(1f))
             val source = rememberBlurtInteractionSource()
             Button(
@@ -152,17 +168,100 @@ fun OnboardingScreen(
                 ),
             ) {
                 Text(
-                    text = when (page) {
-                        0 -> "Continue"
-                        1 -> "Continue"
-                        2 -> "Continue"
-                        else -> "Get Started"
-                    },
+                    text = if (page == lastPage) "Get Started" else "Continue",
                     style = MaterialTheme.typography.labelLarge,
                 )
             }
         }
         Spacer(Modifier.height(BlurtSpacing.xxxl))
+    }
+}
+
+/**
+ * The key step — bring your own keys, the only key path. Blurt ships zero
+ * AI keys, so this is the one place a first-run user can paste their own
+ * free Groq / Gemini keys before anything else. It sits after the value
+ * pages so a brand-new user meets the product before the setup. Keys are
+ * optional: Continue works either way, and the Settings → AI keys sheet
+ * stays available later. Centered when it fits, scrollable on small screens
+ * (Box alignment, not Arrangement.Center, so tall content never clips at
+ * the top).
+ */
+@Composable
+private fun ByokPage(
+    aiKeyViewModel: AiKeyViewModel,
+) {
+    val draftKey by aiKeyViewModel.draftKey.collectAsStateWithLifecycle()
+    val status by aiKeyViewModel.status.collectAsStateWithLifecycle()
+    val geminiDraftKey by aiKeyViewModel.geminiDraftKey.collectAsStateWithLifecycle()
+    val geminiStatus by aiKeyViewModel.geminiStatus.collectAsStateWithLifecycle()
+    val savedTail = aiKeyViewModel.savedKeyTail()
+    val geminiSavedTail = aiKeyViewModel.savedGeminiKeyTail()
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = BlurtSpacing.l),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BlurtOrb(
+                state = OrbState.IDLE,
+                size = 120.dp,
+                icon = BlurtIcons.Key,
+            )
+            Spacer(Modifier.height(BlurtSpacing.l))
+            Text(
+                text = "Bring your own keys",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(BlurtSpacing.s))
+            Text(
+                text = "Blurt ships with zero AI keys. Paste your own free keys to power it — stored encrypted on this device, never uploaded.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = BlurtSpacing.l),
+            )
+            Spacer(Modifier.height(BlurtSpacing.xl))
+            AiKeySection(
+                title = "Groq — classification",
+                icon = BlurtIcons.Bolt,
+                description = "Reads every blurt to pick its type, category, and any reminder time.",
+                noKeyText = "No key — blurts save unclassified",
+                draftKey = draftKey,
+                savedTail = savedTail,
+                status = status,
+                providerName = "Groq",
+                placeholder = "gsk_…",
+                onDraftChange = aiKeyViewModel::onDraftChange,
+                onSaveAndCheck = aiKeyViewModel::saveAndCheck,
+                onRemove = aiKeyViewModel::removeKey,
+            )
+            Spacer(Modifier.height(BlurtSpacing.m))
+            AiKeySection(
+                title = "Gemini — semantic search",
+                icon = BlurtIcons.Sparkle,
+                description = "Backup classifier, plus meaning-based search across your library.",
+                noKeyText = "No key — search falls back to keywords",
+                draftKey = geminiDraftKey,
+                savedTail = geminiSavedTail,
+                status = geminiStatus,
+                providerName = "Gemini",
+                placeholder = "AIza… or AQ.…",
+                onDraftChange = aiKeyViewModel::onGeminiDraftChange,
+                onSaveAndCheck = aiKeyViewModel::saveAndCheckGemini,
+                onRemove = aiKeyViewModel::removeGeminiKey,
+            )
+            Spacer(Modifier.height(BlurtSpacing.s))
+        }
     }
 }
 

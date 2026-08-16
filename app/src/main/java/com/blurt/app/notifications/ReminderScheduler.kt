@@ -5,6 +5,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.blurt.app.data.model.Recurrence
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * Schedules a one-shot alarm that fires a priority Blurt notification at the
@@ -33,6 +36,23 @@ class ReminderScheduler(private val context: Context) {
         alarmManager.cancel(reminderPendingIntent(captureId, ""))
     }
 
+    /**
+     * Schedules the one-time cleanup of a one-shot reminder: at [atMillis]
+     * the blurt is auto-deleted (the reminder already fired and nobody acted
+     * on it — the user asked not to have to clean these up by hand). A past
+     * time fires immediately, which is exactly what a reboot catch-up needs.
+     */
+    fun scheduleAutoDelete(captureId: Long, atMillis: Long) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, autoDeletePendingIntent(captureId))
+    }
+
+    /** Cancels a pending auto-delete (snooze defers it, Done keeps the blurt). */
+    fun cancelAutoDelete(captureId: Long) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(autoDeletePendingIntent(captureId))
+    }
+
     private fun reminderPendingIntent(captureId: Long, content: String): PendingIntent {
         val intent = Intent(context, BlurtReminderReceiver::class.java)
             .putExtra(BlurtReminderReceiver.EXTRA_CAPTURE_ID, captureId)
@@ -44,4 +64,42 @@ class ReminderScheduler(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
+
+    private fun autoDeletePendingIntent(captureId: Long): PendingIntent {
+        val intent = Intent(context, BlurtReminderReceiver::class.java)
+            .setAction(BlurtReminderReceiver.ACTION_AUTO_DELETE)
+            .putExtra(BlurtReminderReceiver.EXTRA_CAPTURE_ID, captureId)
+        return PendingIntent.getBroadcast(
+            context,
+            captureId.toInt() + AUTO_DELETE_OFFSET,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    companion object {
+        /** Keeps the auto-delete alarm's request code apart from the reminder's. */
+        private const val AUTO_DELETE_OFFSET = 3_000_000
+    }
+}
+
+/**
+ * The next fire time of a repeating reminder, advanced from its anchor (the
+ * last scheduled instant) by one day / one week in the device's local zone,
+ * so wall-clock time and weekday stay put. Loops forward past any occurrence
+ * already in the past (e.g. the device was off for several days): the chain
+ * resumes at the next real future moment instead of dying.
+ */
+fun nextRecurringOccurrence(anchorEpochMillis: Long, recurrence: Recurrence): Long {
+    if (recurrence == Recurrence.NONE) return anchorEpochMillis
+    val now = System.currentTimeMillis()
+    // The anchor itself is still ahead (or happening right now) — keep it.
+    // Only a past occurrence (device was off) advances to the next future one.
+    if (anchorEpochMillis >= now) return anchorEpochMillis
+    val stepDays = if (recurrence == Recurrence.DAILY) 1L else 7L
+    var next = Instant.ofEpochMilli(anchorEpochMillis).atZone(ZoneId.systemDefault())
+    do {
+        next = next.plusDays(stepDays)
+    } while (next.toInstant().toEpochMilli() < now)
+    return next.toInstant().toEpochMilli()
 }

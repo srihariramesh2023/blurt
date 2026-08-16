@@ -85,10 +85,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.blurt.app.auth.AuthState
 import com.blurt.app.auth.AuthUser
-import com.blurt.app.ui.components.BlurtLogo
+import com.blurt.app.ui.components.BlurtIcons
+import com.blurt.app.ui.components.BlurtOrb
 import com.blurt.app.ui.components.LocalBlurtListState
 import com.blurt.app.ui.components.LocalBlurtScrollState
 import com.blurt.app.ui.components.LocalTabBarInset
+import com.blurt.app.ui.components.OrbState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.login.LoginScreen
@@ -202,7 +204,8 @@ private fun BlurtAppRoot(
     }
 }
 
-/** Brief, calm splash shown only while the persisted session is restored. */
+/** Brief, calm splash shown only while the persisted session is restored:
+ *  the orb breathing softly over the wordmark. */
 @Composable
 private fun BlurtSplash() {
     Box(
@@ -211,7 +214,15 @@ private fun BlurtSplash() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
-        BlurtLogo(size = 64.dp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            BlurtOrb(state = OrbState.IDLE, size = 112.dp, icon = BlurtIcons.BlurtMark)
+            Spacer(Modifier.height(BlurtSpacing.xl))
+            Text(
+                text = "Blurt",
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
     }
 }
 

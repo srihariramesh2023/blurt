@@ -79,6 +79,14 @@ interface CaptureDao {
     @Query("SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL")
     suspend fun getAllActive(ownerId: String): List<CaptureEntity>
 
+    /**
+     * Every row for the user, tombstones included — the sync merge needs the
+     * full picture so a local delete is never mistaken for a missing row and
+     * resurrected by a stale remote doc.
+     */
+    @Query("SELECT * FROM captures WHERE ownerId = :ownerId")
+    suspend fun getAllIncludingDeleted(ownerId: String): List<CaptureEntity>
+
     @Query("SELECT * FROM captures WHERE remoteId = :remoteId AND ownerId = :ownerId AND deletedAt IS NULL LIMIT 1")
     suspend fun getByRemoteId(remoteId: String, ownerId: String): CaptureEntity?
 
@@ -153,4 +161,31 @@ interface CaptureDao {
             "ORDER BY reminderAt ASC"
     )
     suspend fun getUpcomingReminders(ownerId: String, now: Long): List<CaptureEntity>
+
+    /**
+     * Recurring, not-yet-done reminders of the user (past or future) — the
+     * boot receiver advances past occurrences to the next future one so a
+     * daily/weekly chain can never die because the device was off.
+     */
+    @Query(
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+            "AND recurrence IS NOT NULL AND recurrence != 'NONE' AND completedAt IS NULL " +
+            "ORDER BY reminderAt ASC"
+    )
+    suspend fun getRecurringReminders(ownerId: String): List<CaptureEntity>
+
+    /**
+     * One-shot reminders that already fired but are still alive — their
+     * auto-delete alarm (cleared on reboot) must be re-armed so the blurt
+     * still cleans itself up. [since] bounds the lookback so ancient rows
+     * aren't resurrected.
+     */
+    @Query(
+        "SELECT * FROM captures WHERE ownerId = :ownerId AND deletedAt IS NULL " +
+            "AND completedAt IS NULL " +
+            "AND (recurrence IS NULL OR recurrence = 'NONE') " +
+            "AND reminderAt IS NOT NULL AND reminderAt < :now AND reminderAt > :since " +
+            "ORDER BY reminderAt ASC"
+    )
+    suspend fun getExpiredOneTimeReminders(ownerId: String, now: Long, since: Long): List<CaptureEntity>
 }

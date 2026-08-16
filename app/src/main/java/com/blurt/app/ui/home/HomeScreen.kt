@@ -1,7 +1,19 @@
 package com.blurt.app.ui.home
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,9 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -25,50 +35,129 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blurt.app.auth.AuthUser
 import com.blurt.app.ui.components.BlurtIcons
 import com.blurt.app.ui.components.BlurtOrb
-import com.blurt.app.ui.components.LocalBlurtScrollState
+import com.blurt.app.ui.components.BlurtSound
 import com.blurt.app.ui.components.LocalTabBarInset
 import com.blurt.app.ui.components.OrbState
 import com.blurt.app.ui.components.blurtPressScale
 import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
+import com.blurt.app.ui.theme.BlurtMotion
 import com.blurt.app.ui.theme.BlurtSpacing
+import com.blurt.app.ui.theme.rememberReduceMotion
+import com.blurt.app.ui.voice.VoiceCaptureFlow
+import com.blurt.app.ui.voice.VoicePhase
+import com.blurt.app.ui.voice.VoiceViewModel
 
 /**
- * Home — the board's capture surface (screen 05): a greeting, the glowing
- * orb, "or", and Type instead. Nothing competes with the orb; everything
- * the user captures lives in Library.
+ * Home — the capture surface. Pressing the orb transitions **in place** into
+ * listening: no page push, no second orb — the hero fades into the flowing
+ * waveform, live transcript, and stop control. Everything captured lives in
+ * Library.
  */
 @Composable
 fun HomeScreen(
     user: AuthUser,
-    onVoice: () -> Unit,
-    onCapture: () -> Unit,
+    onCapture: (String?) -> Unit,
     onSearch: () -> Unit,
     onOpenProfile: () -> Unit,
+    viewModel: VoiceViewModel = viewModel(factory = VoiceViewModel.Factory),
 ) {
-    // Scrollable so the hero never collides with the floating tab bar on
-    // short screens — the bottom inset clears the glass. The scroll state is
-    // the shell's (LocalBlurtScrollState) so the frosted bar copy tracks it.
-    val scrollState = LocalBlurtScrollState.current ?: rememberScrollState()
+    val phase by viewModel.phase.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val needsMicPermission by viewModel.needsMicPermission.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val haptics = rememberBlurtHaptics()
+    val reduceMotion = rememberReduceMotion()
+
+    // Mic permission — owned here because the orb (the thing that requests
+    // it) lives on Home now.
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onMicPermissionResult(granted)
+    }
+    LaunchedEffect(needsMicPermission) {
+        if (needsMicPermission) {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // Errors buzz + tone, whatever the phase.
+    LaunchedEffect(error) {
+        if (error != null) {
+            haptics.error()
+            BlurtSound.playError()
+        }
+    }
+
+    val idle = phase == VoicePhase.IDLE
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = BlurtSpacing.grouped)
-            .verticalScroll(scrollState)
             .padding(bottom = LocalTabBarInset.current + BlurtSpacing.m),
     ) {
         Spacer(Modifier.height(BlurtSpacing.m))
         HomeHeader(user = user, onSearch = onSearch, onOpenProfile = onOpenProfile)
-        MicHero(onVoice = onVoice, onType = onCapture)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            AnimatedContent(
+                targetState = idle,
+                transitionSpec = {
+                    if (reduceMotion) {
+                        (fadeIn(tween(BlurtMotion.FADE_MS)) togetherWith fadeOut(tween(BlurtMotion.FADE_MS / 2)))
+                    } else if (targetState) {
+                        // Back to the resting hero — quick and calm, no lingering.
+                        val enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.98f)
+                        val exit = fadeOut(tween(120))
+                        enter togetherWith exit
+                    } else {
+                        // The orb press — the hero dims out, listening rises in.
+                        val enter = fadeIn(BlurtMotion.standard()) + slideInVertically(BlurtMotion.entrance()) { it / 6 }
+                        val exit = fadeOut(BlurtMotion.micro()) + scaleOut(BlurtMotion.micro(), targetScale = 0.97f)
+                        enter togetherWith exit
+                    }
+                },
+                label = "homeCapture",
+            ) { isIdle ->
+                if (isIdle) {
+                    MicHero(
+                        error = error,
+                        onMicTapped = {
+                            haptics.tick()
+                            BlurtSound.playStart()
+                            viewModel.onMicTapped()
+                        },
+                        onType = { onCapture(null) },
+                    )
+                } else {
+                    VoiceCaptureFlow(
+                        viewModel = viewModel,
+                        onEdit = onCapture,
+                        onDone = { viewModel.dismissSaved() },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -156,76 +245,83 @@ private fun initials(displayName: String?): String {
 }
 
 /**
- * The V2 home hero — the orb (board screen 05): a glowing violet orb with a
- * mic, "Tap the orb and just talk. / Blurt listens. Blurt organizes.", a
- * quiet "or" divider, then "Type instead". Typing never competes with it.
+ * The resting hero — the glowing violet orb with the burst mark, "Tap the
+ * orb and just talk.", a quiet "or" divider, then "Type instead". Typing
+ * never competes with the orb. Pressing the orb transitions this whole
+ * surface in place into listening.
  */
 @Composable
-private fun MicHero(onVoice: () -> Unit, onType: () -> Unit) {
-    val haptics = rememberBlurtHaptics()
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(420.dp),
-        contentAlignment = Alignment.Center,
+private fun MicHero(
+    error: String?,
+    onMicTapped: () -> Unit,
+    onType: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BlurtOrb(
-                state = OrbState.IDLE,
-                size = 176.dp,
-                icon = BlurtIcons.Mic,
-                contentDescription = "Speak a blurt",
-                onClick = {
-                    haptics.tick()
-                    onVoice()
-                },
-            )
-            Spacer(Modifier.height(BlurtSpacing.l))
-            Text(
-                text = "Tap the orb and just talk.",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = "Blurt listens. Blurt organizes.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(BlurtSpacing.m))
-            // The quiet "or" divider — the board's consistent pattern.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OrLine()
-                Spacer(Modifier.width(BlurtSpacing.m))
-                Text(
-                    text = "or",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(BlurtSpacing.m))
-                OrLine()
-            }
+        BlurtOrb(
+            state = OrbState.IDLE,
+            size = 176.dp,
+            icon = BlurtIcons.BlurtMark,
+            contentDescription = "Speak a blurt",
+            onClick = onMicTapped,
+        )
+        Spacer(Modifier.height(BlurtSpacing.l))
+        Text(
+            text = "Tap the orb and just talk.",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Blurt listens. Blurt organizes.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        error?.let {
             Spacer(Modifier.height(BlurtSpacing.s))
-            val typeSource = rememberBlurtInteractionSource()
-            TextButton(
-                onClick = onType,
-                interactionSource = typeSource,
-                modifier = Modifier
-                    .defaultMinSize(minHeight = 44.dp)
-                    .blurtPressScale(typeSource),
-            ) {
-                Icon(
-                    imageVector = BlurtIcons.Keyboard,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text("Type instead", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+        }
+        Spacer(Modifier.height(BlurtSpacing.m))
+        // The quiet "or" divider — the board's consistent pattern.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OrLine()
+            Spacer(Modifier.width(BlurtSpacing.m))
+            Text(
+                text = "or",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(BlurtSpacing.m))
+            OrLine()
+        }
+        Spacer(Modifier.height(BlurtSpacing.s))
+        val typeSource = rememberBlurtInteractionSource()
+        TextButton(
+            onClick = onType,
+            interactionSource = typeSource,
+            modifier = Modifier
+                .defaultMinSize(minHeight = 44.dp)
+                .blurtPressScale(typeSource),
+        ) {
+            Icon(
+                imageVector = BlurtIcons.Keyboard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Type instead", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

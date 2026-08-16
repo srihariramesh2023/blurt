@@ -1,22 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Blurt orb — a violet radial gradient that glows at the center and
-     deepens to the accent at the edges. Full-bleed square so every launcher
-     mask crops it cleanly. -->
+<!-- The Blurt orb — a lit glass violet sphere: the brand's radial gradient
+     with a top-left light source, a soft specular catch, and an ambient
+     shadow at the bottom-right, matching the in-app orb exactly. Full-bleed
+     square so every launcher mask crops it cleanly. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- The sphere's base gradient — light source at the top-left. -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="radial"
-                android:centerX="54"
-                android:centerY="44"
-                android:gradientRadius="72"
-                android:startColor="#9B7BFF"
+                android:centerX="44"
+                android:centerY="38"
+                android:gradientRadius="76"
+                android:startColor="#B9A3FF"
+                android:centerColor="#9B7BFF"
                 android:endColor="#5A45F2" />
+        </aapt:attr>
+    </path>
+    <!-- The glass catch — a soft white bloom where the light hits. -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="32"
+                android:centerY="26"
+                android:gradientRadius="40"
+                android:startColor="#6BFFFFFF"
+                android:centerColor="#14FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </aapt:attr>
+    </path>
+    <!-- Ambient occlusion — the sphere falls into shadow bottom-right. -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="74"
+                android:centerY="84"
+                android:gradientRadius="52"
+                android:startColor="#00FFFFFF"
+                android:centerColor="#2624136E"
+                android:endColor="#4D24136E" />
         </aapt:attr>
     </path>
 </vector>

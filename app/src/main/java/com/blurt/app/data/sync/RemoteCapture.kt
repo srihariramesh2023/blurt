@@ -15,6 +15,8 @@ data class RemoteCapture(
     val intent: String? = null,
     /** When a reminder notification was scheduled on some device; null otherwise. */
     val reminderAt: Long? = null,
+    /** Recurrence enum name ("DAILY"/"WEEKLY") when the reminder repeats; null = one-shot. */
+    val recurrence: String? = null,
     /** User-marked important; the gold star travels across devices. */
     val isImportant: Boolean = false,
     /** Hidden from main lists on every device, browsable in Library → Archived. */

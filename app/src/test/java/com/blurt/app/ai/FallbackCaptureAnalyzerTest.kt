@@ -20,17 +20,19 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class FallbackCaptureAnalyzerTest {
 
-    private fun analysis(intent: CaptureIntent) = CaptureAnalysis(
-        intent = intent,
-        category = CaptureCategory.OTHER,
-        reminderAt = null,
+    private fun analysis(intent: CaptureIntent) = listOf(
+        CaptureAnalysis(
+            intent = intent,
+            category = CaptureCategory.OTHER,
+            reminderAt = null,
+        )
     )
 
     private class FakeAnalyzer(
-        private val result: CaptureAnalysis?,
+        private val result: List<CaptureAnalysis>?,
         private val throws: Boolean = false,
     ) : CaptureAnalyzer {
-        override suspend fun analyze(content: String, nowEpochMillis: Long): CaptureAnalysis? {
+        override suspend fun analyze(content: String, nowEpochMillis: Long): List<CaptureAnalysis>? {
             if (throws) throw IllegalStateException("provider down")
             return result
         }
@@ -42,7 +44,7 @@ class FallbackCaptureAnalyzerTest {
             primary = FakeAnalyzer(analysis(CaptureIntent.TASK)),
             secondary = FakeAnalyzer(analysis(CaptureIntent.NOTE)),
         )
-        assertEquals(CaptureIntent.TASK, chain.analyze("do the dishes", 0L)?.intent)
+        assertEquals(CaptureIntent.TASK, chain.analyze("do the dishes", 0L)?.firstOrNull()?.intent)
     }
 
     @Test
@@ -51,7 +53,7 @@ class FallbackCaptureAnalyzerTest {
             primary = FakeAnalyzer(null),
             secondary = FakeAnalyzer(analysis(CaptureIntent.REMINDER)),
         )
-        assertEquals(CaptureIntent.REMINDER, chain.analyze("remind me", 0L)?.intent)
+        assertEquals(CaptureIntent.REMINDER, chain.analyze("remind me", 0L)?.firstOrNull()?.intent)
     }
 
     @Test
@@ -60,7 +62,7 @@ class FallbackCaptureAnalyzerTest {
             primary = FakeAnalyzer(null, throws = true),
             secondary = FakeAnalyzer(analysis(CaptureIntent.IDEA)),
         )
-        assertEquals(CaptureIntent.IDEA, chain.analyze("idea time", 0L)?.intent)
+        assertEquals(CaptureIntent.IDEA, chain.analyze("idea time", 0L)?.firstOrNull()?.intent)
     }
 
     @Test
@@ -89,6 +91,6 @@ class FallbackCaptureAnalyzerTest {
         )
         val result = chain.analyze("grocery run", 0L)
         assertTrue(result != null)
-        assertEquals(CaptureIntent.TASK, result!!.intent)
+        assertEquals(CaptureIntent.TASK, result!!.firstOrNull()!!.intent)
     }
 }
