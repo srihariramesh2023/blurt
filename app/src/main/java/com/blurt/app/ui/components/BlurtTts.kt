@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.util.Base64
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
@@ -18,19 +17,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * Blurt's spoken voice — the companion reply.
  *
- * Two-tier by design: when a **Gemini key** is saved (BYOK, free tier), the
- * reply is spoken by Google's own TTS model — a natural, warm voice, the same
- * family as ChatGPT voice mode. Audio is **streamed** so the voice starts
- * while the model is still generating, instead of after the whole clip is
- * ready. Without a key, or when the network / provider fails, it falls back
- * to the device's built-in TextToSpeech engine so the conversation never
- * stalls.
+ * Two-tier by design: when a **Fish Audio** key is saved (BYOK, free tier),
+ * the reply is spoken by Fish's natural neural voice (model s2.1-pro-free),
+ * returned as raw 24 kHz 16-bit PCM and played straight through AudioTrack.
+ * Without a Fish key, or when the provider fails, it falls back to the
+ * device's built-in TextToSpeech engine so the conversation never stalls.
  *
  * Every path reports completion exactly once ([onDone] fires when the
  * utterance finishes or when nothing could be spoken) — the flow advances
@@ -38,9 +34,7 @@ import org.json.JSONObject
  */
 class BlurtTts(
     context: Context,
-    private val geminiKeyProvider: () -> String? = { null },
-    private val packageName: String = "",
-    private val certSha1: String = "",
+    private val fishKeyProvider: () -> String? = { null },
 ) {
 
     private val appContext = context.applicationContext
@@ -70,53 +64,31 @@ class BlurtTts(
         }
         generation++
         val gen = generation
-        val apiKey = geminiKeyProvider()
+        val apiKey = fishKeyProvider()
         if (!apiKey.isNullOrBlank()) {
-            android.util.Log.d(TAG, "speak: gemini voice (key present)")
+            android.util.Log.d(TAG, "speak: fish voice (key present)")
             scope.launch {
                 if (gen != generation) return@launch
-                // Streaming first — audio plays while the model generates,
-                // which is what makes the reply feel conversational.
-                val streamResult = runCatching { synthStream(text, apiKey, gen, onDone) }
+                val synthResult = runCatching { synthFish(text, apiKey) }
                 if (gen != generation) return@launch
-                if (streamResult.getOrDefault(false)) return@launch
-                val streamError = streamResult.exceptionOrNull()
-                streamError?.let {
-                    android.util.Log.w(TAG, "gemini stream failed: ${it::class.simpleName}: ${it.message}")
-                }
-                // The free tier caps TTS hard — when quota is hit, reply as
-                // text and move on instead of stalling on a robot voice.
-                if (streamError?.isQuota() == true) {
-                    android.util.Log.w(TAG, "gemini TTS quota — text-only reply")
-                    mainHandler.postDelayed({ if (gen == generation) onDone() }, TEXT_ONLY_PAUSE_MS)
-                    return@launch
-                }
-                // One-shot fallback for transient failures (not quota).
-                val synthResult = runCatching { synth(text, apiKey) }
-                if (gen != generation) return@launch
-                if (synthResult.exceptionOrNull()?.isQuota() == true) {
-                    android.util.Log.w(TAG, "gemini TTS quota — text-only reply")
-                    mainHandler.postDelayed({ if (gen == generation) onDone() }, TEXT_ONLY_PAUSE_MS)
-                    return@launch
-                }
-                synthResult.exceptionOrNull()?.let {
-                    android.util.Log.w(TAG, "gemini synth failed: ${it::class.simpleName}: ${it.message}")
-                }
                 val pcm = synthResult.getOrNull()
                 if (pcm == null || pcm.isEmpty()) {
-                    android.util.Log.w(TAG, "gemini synth empty/absent — device fallback")
+                    synthResult.exceptionOrNull()?.let {
+                        android.util.Log.w(TAG, "fish synth failed: ${it::class.simpleName}: ${it.message}")
+                    }
+                    android.util.Log.w(TAG, "fish synth empty/absent — device fallback")
                     mainHandler.post { if (gen == generation) speakWithDevice(text, onDone) }
                 } else {
-                    android.util.Log.d(TAG, "gemini synth ok: ${pcm.size} bytes — playing")
+                    android.util.Log.d(TAG, "fish synth ok: ${pcm.size} bytes — playing")
                     runCatching { playPcm(pcm, gen, onDone) }
                         .onFailure {
-                            android.util.Log.w(TAG, "gemini playback failed — device fallback: ${it.message}")
+                            android.util.Log.w(TAG, "fish playback failed — device fallback: ${it.message}")
                             mainHandler.post { if (gen == generation) speakWithDevice(text, onDone) }
                         }
                 }
             }
         } else {
-            android.util.Log.d(TAG, "speak: device fallback (no gemini key)")
+            android.util.Log.d(TAG, "speak: device fallback (no fish key)")
             speakWithDevice(text, onDone)
         }
     }
@@ -126,7 +98,7 @@ class BlurtTts(
      * reply doesn't pay the engine's cold-start cost on top of everything.
      */
     fun warmUp() {
-        if (geminiKeyProvider().isNullOrBlank()) ensureInit()
+        if (fishKeyProvider().isNullOrBlank()) ensureInit()
     }
 
     /** Stops the current utterance and drops any queued one. */
@@ -154,164 +126,39 @@ class BlurtTts(
         scope.cancel()
     }
 
-    // --- Gemini TTS (the primary voice) -------------------------------------
+    // --- Fish Audio TTS (the primary voice) ---------------------------------
 
     /**
-     * Streaming synthesis: plays audio chunks as they arrive, so the voice
-     * starts within a beat of the reply text instead of after the whole clip
-     * has been generated. Returns true once audio was played (completion was
-     * scheduled); false when nothing could be played.
+     * One-shot synthesis via Fish Audio's free tier. Returns raw 24 kHz
+     * 16-bit mono PCM — exactly what the AudioTrack player expects.
      */
-    private fun synthStream(text: String, apiKey: String, gen: Int, onDone: () -> Unit): Boolean {
+    private fun synthFish(text: String, apiKey: String): ByteArray {
         val body = JSONObject()
-            .put("model", MODEL)
-            .put("input", text)
-            .put("response_format", JSONObject().put("type", "audio"))
-            .put(
-                "generation_config",
-                JSONObject().put(
-                    "speech_config",
-                    JSONArray().put(JSONObject().put("voice", VOICE)),
-                ),
-            )
-            .put("stream", true)
-        val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
+            .put("text", text)
+            .put("reference_id", FISH_VOICE_ID)
+            .put("format", "pcm")
+            .put("sample_rate", PCM_RATE)
+            .put("latency", "low")
+        val connection = URL(FISH_ENDPOINT).openConnection() as HttpURLConnection
         try {
-            applyAuth(connection, apiKey)
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 30_000
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Authorization", "Bearer $apiKey")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("model", FISH_MODEL)
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
             connection.doOutput = true
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
             val code = connection.responseCode
             if (code !in 200..299) {
                 val err = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                throw IllegalStateException("Gemini TTS stream HTTP $code: ${err.take(200)}")
+                throw IllegalStateException("Fish TTS HTTP $code: ${err.take(200)}")
             }
-            val track = buildTrack()
-            audioTrack = track
-            var playedBytes = 0L
-            try {
-                track.play()
-                val reader = connection.inputStream.bufferedReader(Charsets.UTF_8)
-                while (true) {
-                    val line = reader.readLine() ?: break
-                    val payload = line.trim().removePrefix("data:").trim()
-                    if (payload.isEmpty() || payload == "[DONE]") continue
-                    val delta = runCatching { JSONObject(payload).optJSONObject("delta") }.getOrNull() ?: continue
-                    if (delta.optString("type") != "audio") continue
-                    val chunk = Base64.decode(delta.optString("data"), Base64.DEFAULT)
-                    if (chunk.isNotEmpty()) {
-                        track.write(chunk, 0, chunk.size)
-                        playedBytes += chunk.size
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "gemini stream read failed: ${e.message}")
-            }
-            if (playedBytes == 0L) {
-                runCatching { track.release() }
-                if (audioTrack === track) audioTrack = null
-                return false
-            }
-            // The model streams faster than real time, so the track buffers a
-            // fraction of the clip — give it a beat to drain, then finish.
-            val drainMs = (playedBytes * 1000 / (PCM_RATE * 2)).coerceAtMost(2_000) + 300
-            mainHandler.postDelayed(
-                {
-                    runCatching { track.release() }
-                    if (audioTrack === track) audioTrack = null
-                    if (gen == generation) onDone()
-                },
-                drainMs,
-            )
-            return true
+            return connection.inputStream.use { it.readBytes() }
         } finally {
             connection.disconnect()
         }
-    }
-
-    /**
-     * One-shot synthesis (non-streaming fallback). Returns the raw 24 kHz
-     * 16-bit mono PCM.
-     */
-    private fun synth(text: String, apiKey: String): ByteArray {
-        val body = JSONObject()
-            .put("model", MODEL)
-            .put("input", text)
-            .put("response_format", JSONObject().put("type", "audio"))
-            .put(
-                "generation_config",
-                JSONObject().put(
-                    "speech_config",
-                    JSONArray().put(JSONObject().put("voice", VOICE)),
-                ),
-            )
-
-        val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
-        try {
-            applyAuth(connection, apiKey)
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 20_000
-            connection.doOutput = true
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
-                throw IllegalStateException("Gemini TTS HTTP $code: ${raw.take(200)}")
-            }
-            val root = JSONObject(raw)
-            val data = findAudio(root)
-                ?: throw IllegalStateException("Gemini TTS: no audio in response: ${raw.take(600)}")
-            return Base64.decode(data, Base64.DEFAULT)
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    private fun applyAuth(connection: HttpURLConnection, apiKey: String) {
-        connection.requestMethod = "POST"
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.setRequestProperty("x-goog-api-key", apiKey)
-        // Android-app key restriction headers — the same ones the analyzers
-        // send, so a key limited to this app validates here too.
-        if (packageName.isNotBlank() && certSha1.isNotBlank()) {
-            connection.setRequestProperty("X-Android-Package", packageName)
-            connection.setRequestProperty("X-Android-Cert", certSha1)
-        }
-    }
-
-    /**
-     * Finds the base64 audio in a non-streaming Interactions response. The
-     * audio can live in a few places depending on the API version: a
-     * top-level `output_audio` block, `steps[i].output_audio`, the current
-     * shape `steps[i].content` (audio-only parts, each with a `data` field),
-     * or the older `steps[i].output` typed-part array (`type == "audio"`).
-     */
-    private fun findAudio(root: JSONObject): String? {
-        root.optJSONObject("output_audio")?.optString("data")?.takeIf { it.isNotBlank() }?.let { return it }
-        val steps = root.optJSONArray("steps") ?: return null
-        for (i in 0 until steps.length()) {
-            val step = steps.optJSONObject(i) ?: continue
-            step.optJSONObject("output_audio")?.optString("data")?.takeIf { it.isNotBlank() }?.let { return it }
-            step.optJSONArray("content")?.let { parts ->
-                for (j in 0 until parts.length()) {
-                    val data = parts.optJSONObject(j)?.optString("data")
-                    if (!data.isNullOrBlank()) return data
-                }
-            }
-            val output = step.optJSONArray("output") ?: continue
-            for (j in 0 until output.length()) {
-                val part = output.optJSONObject(j) ?: continue
-                if (part.optString("type") == "audio") {
-                    val data = part.optString("data")
-                    if (data.isNotBlank()) return data
-                }
-            }
-        }
-        return null
     }
 
     private fun buildTrack(): AudioTrack {
@@ -428,12 +275,11 @@ class BlurtTts(
         const val TAG = "BlurtTts"
         const val FALLBACK_COMPLETE_MS = 8_000L
         const val NO_ENGINE_PAUSE_MS = 900L
-        const val TEXT_ONLY_PAUSE_MS = 1_600L
-        const val MODEL = "gemini-3.1-flash-tts-preview"
-        const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
-        const val VOICE = "Kore"
+        const val FISH_ENDPOINT = "https://api.fish.audio/v1/tts"
+        const val FISH_MODEL = "s2.1-pro-free"
+        const val FISH_VOICE_ID = "bf322df2096a46f18c579d0baa36f41d"
         const val PCM_RATE = 24_000
-
-        fun Throwable.isQuota(): Boolean = message?.contains("HTTP 429") == true
+        const val CONNECT_TIMEOUT_MS = 8_000
+        const val READ_TIMEOUT_MS = 20_000
     }
 }

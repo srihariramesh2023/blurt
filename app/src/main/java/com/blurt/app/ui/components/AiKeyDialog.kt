@@ -53,6 +53,9 @@ fun AiKeyDialog(
     val geminiStatus by viewModel.geminiStatus.collectAsStateWithLifecycle()
     val savedTail = viewModel.savedKeyTail()
     val geminiSavedTail = viewModel.savedGeminiKeyTail()
+    val fishDraftKey by viewModel.fishDraftKey.collectAsStateWithLifecycle()
+    val fishStatus by viewModel.fishStatus.collectAsStateWithLifecycle()
+    val fishSavedTail = viewModel.savedFishKeyTail()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -119,6 +122,23 @@ fun AiKeyDialog(
                     onDraftChange = viewModel::onGeminiDraftChange,
                     onSaveAndCheck = viewModel::saveAndCheckGemini,
                     onRemove = viewModel::removeGeminiKey,
+                )
+
+                Spacer(Modifier.height(BlurtSpacing.m))
+
+                AiKeySection(
+                    title = "Fish Audio — companion voice",
+                    icon = BlurtIcons.Mic,
+                    description = "Speaks Blurt's replies in a natural neural voice. Falls back to the device voice when no key is set.",
+                    noKeyText = "No key — Blurt uses the device voice",
+                    draftKey = fishDraftKey,
+                    savedTail = fishSavedTail,
+                    status = fishStatus,
+                    providerName = "Fish",
+                    placeholder = "sk-fish-…",
+                    onDraftChange = viewModel::onFishDraftChange,
+                    onSaveAndCheck = viewModel::saveAndCheckFish,
+                    onRemove = viewModel::removeFishKey,
                 )
             }
         }

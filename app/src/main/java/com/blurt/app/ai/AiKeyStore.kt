@@ -53,6 +53,15 @@ class AiKeyStore(
 
     fun clearGeminiKey() = clearKey(PREF_GEMINI_KEY)
 
+    // --- Fish (companion voice) ----------------------------------------------
+
+    /** The user's Fish Audio key, or null when none is saved (or undecryptable). */
+    fun fishKey(): String? = readKey(PREF_FISH_KEY)
+
+    fun saveFishKey(key: String) = writeKey(PREF_FISH_KEY, key)
+
+    fun clearFishKey() = clearKey(PREF_FISH_KEY)
+
     // --- Shared encrypted read/write -----------------------------------------
 
     private fun readKey(pref: String): String? {
@@ -108,6 +117,7 @@ class AiKeyStore(
         private const val PREFS_NAME = "blurt_ai_keys"
         private const val PREF_GROQ_KEY = "groq_api_key"
         private const val PREF_GEMINI_KEY = "gemini_api_key"
+        private const val PREF_FISH_KEY = "fish_api_key"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "blurt_groq_api_key"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"

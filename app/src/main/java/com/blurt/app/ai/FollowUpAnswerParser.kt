@@ -25,8 +25,9 @@ object FollowUpAnswerParser {
         if (declines.any { t.contains(it) }) return false
 
         val accepts = listOf(
-            "yes", "yeah", "yep", "sure", "okay", "ok", "please", "go ahead",
+            "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "please", "go ahead",
             "do it", "of course", "definitely", "sounds good", "fine",
+            "uh huh", "mhm", "mm hmm",
         )
         return accepts.any { t.contains(it) }
     }

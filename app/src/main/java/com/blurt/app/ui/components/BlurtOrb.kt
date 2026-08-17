@@ -49,10 +49,10 @@ enum class OrbState {
 /** The brand's orb gradient — the launcher's own colors, one voice
  *  everywhere: launcher, splash, sign-in, onboarding, home. */
 internal val BlurtBrandHighlight = Color(0xFFB9A3FF)
-internal val BlurtBrandMid       = Color(0xFF9B7BFF)
-internal val BlurtBrandAccent    = Color(0xFF7C5EF5)
-internal val BlurtBrandDeep      = Color(0xFF5A45F2)
-internal val BlurtBrandShadow    = Color(0xFF24136E)
+internal val BlurtBrandMid = Color(0xFF9B7BFF)
+internal val BlurtBrandAccent = Color(0xFF7C5EF5)
+internal val BlurtBrandDeep = Color(0xFF5A45F2)
+internal val BlurtBrandShadow = Color(0xFF24136E)
 
 /**
  * The heart of Blurt V2 — the glowing violet orb. One component, four states,
@@ -89,13 +89,12 @@ fun BlurtOrb(
     )
 
     val glowAlpha = when (state) {
-        OrbState.IDLE -> if (reduceMotion) 0.7f else 0.68f + 0.22f * breath
-        OrbState.RECORDING -> 0.95f
-        OrbState.PROCESSING -> 0.85f
+        OrbState.IDLE -> if (reduceMotion) 0.55f else 0.5f + 0.18f * breath
+        OrbState.RECORDING -> 0.75f
+        OrbState.PROCESSING -> 0.65f
         OrbState.COMPLETE -> 0.85f
     }
-    // The resting orb wears a vivid sunset gradient; active states stay brand-violet.
-    val discBase = if (state == OrbState.IDLE) VividSphereBase else SphereBase
+
     Box(
         modifier = modifier
             .size(size)
@@ -141,17 +140,14 @@ fun BlurtOrb(
                     icon = icon,
                     contentDescription = contentDescription,
                     sheen = state == OrbState.IDLE || state == OrbState.RECORDING,
-                    base = discBase,
                 )
             }
-
         } else {
             BlurtOrbDisc(
                 discSize = discSize,
                 icon = icon,
                 contentDescription = contentDescription,
                 sheen = state == OrbState.IDLE || state == OrbState.RECORDING,
-                base = discBase,
             )
         }
     }
@@ -172,7 +168,6 @@ internal fun BlurtOrbDisc(
     icon: ImageVector?,
     contentDescription: String?,
     sheen: Boolean = false,
-    base: Brush = SphereBase,
     modifier: Modifier = Modifier,
 ) {
     val reduceMotion = rememberReduceMotion()
@@ -189,7 +184,7 @@ internal fun BlurtOrbDisc(
             .size(discSize)
             .clip(CircleShape)
             .drawBehind {
-                drawCircle(base)
+                drawCircle(SphereBase)
                 drawCircle(SphereSpecular)
                 drawCircle(SphereShade)
                 drawCircle(SphereRim)
@@ -221,12 +216,6 @@ internal fun BlurtOrbDisc(
     }
 }
 
-/** The resting orb's skin — a vivid sunset gradient, violet to pink to amber. */
-private val VividSphereBase = Brush.radialGradient(
-    colors = listOf(Color(0xFFB9A3FF), Color(0xFFFF8AD8), Color(0xFFFFB066)),
-    center = Offset(0.38f, 0.34f),
-    radius = 1.1f,
-)
 /** The sphere's base — the brand gradient, lit from the top-left. */
 private val SphereBase = Brush.radialGradient(
     colors = listOf(BlurtBrandHighlight, BlurtBrandMid, BlurtBrandAccent, BlurtBrandDeep),
@@ -312,5 +301,3 @@ fun OrbProcessingRing(size: Dp = 168.dp, modifier: Modifier = Modifier) {
         )
     }
 }
-
-

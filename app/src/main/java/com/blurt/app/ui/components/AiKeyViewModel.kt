@@ -12,6 +12,8 @@ import com.blurt.app.ai.GeminiKeyStatus
 import com.blurt.app.ai.GeminiKeyValidator
 import com.blurt.app.ai.GroqKeyStatus
 import com.blurt.app.ai.GroqKeyValidator
+import com.blurt.app.ai.FishKeyStatus
+import com.blurt.app.ai.FishKeyValidator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +43,7 @@ class AiKeyViewModel(
     private val keyStore: AiKeyStore,
     private val groqValidator: GroqKeyValidator = GroqKeyValidator(),
     private val geminiValidator: GeminiKeyValidator = GeminiKeyValidator(),
+    private val fishValidator: FishKeyValidator = FishKeyValidator(),
 ) : ViewModel() {
 
     // --- Groq (capture classification) ---------------------------------------
@@ -131,6 +134,49 @@ class AiKeyViewModel(
         _geminiStatus.value = AiKeyStatus.Idle
     }
 
+    // --- Fish (companion voice) ----------------------------------------------
+
+    private val _fishDraftKey = MutableStateFlow("")
+    val fishDraftKey: StateFlow<String> = _fishDraftKey.asStateFlow()
+
+    private val _fishStatus = MutableStateFlow<AiKeyStatus>(AiKeyStatus.Idle)
+    val fishStatus: StateFlow<AiKeyStatus> = _fishStatus.asStateFlow()
+
+    /** The tail of the currently saved Fish key (never the full key). */
+    fun savedFishKeyTail(): String? = keyStore.fishKey()?.takeLast(4)
+
+    fun onFishDraftChange(value: String) {
+        _fishDraftKey.value = value
+        _fishStatus.value = AiKeyStatus.Idle
+    }
+
+    /** Probes the key with Fish; saves it only when accepted (or unreachable). */
+    fun saveAndCheckFish() {
+        val key = _fishDraftKey.value.trim()
+        if (key.isBlank()) return
+        viewModelScope.launch {
+            _fishStatus.value = AiKeyStatus.Checking
+            when (fishValidator.validate(key)) {
+                FishKeyStatus.VALID -> {
+                    keyStore.saveFishKey(key)
+                    _fishDraftKey.value = ""
+                    _fishStatus.value = AiKeyStatus.Valid
+                }
+                FishKeyStatus.INVALID -> _fishStatus.value = AiKeyStatus.Invalid
+                FishKeyStatus.UNREACHABLE -> {
+                    keyStore.saveFishKey(key)
+                    _fishDraftKey.value = ""
+                    _fishStatus.value = AiKeyStatus.Unreachable
+                }
+            }
+        }
+    }
+
+    fun removeFishKey() {
+        keyStore.clearFishKey()
+        _fishDraftKey.value = ""
+        _fishStatus.value = AiKeyStatus.Idle
+    }
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -142,6 +188,7 @@ class AiKeyViewModel(
                         packageName = app.packageName,
                         certSha1 = app.container.signingCertSha1(app),
                     ),
+                    fishValidator = FishKeyValidator(),
                 )
             }
         }

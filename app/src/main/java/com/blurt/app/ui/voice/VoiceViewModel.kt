@@ -23,6 +23,7 @@ import com.blurt.app.data.model.CaptureType
 import com.blurt.app.data.model.Recurrence
 import com.blurt.app.notifications.ReminderScheduler
 import com.blurt.app.ui.components.BlurtTts
+import com.blurt.app.util.TimeFormat
 import com.blurt.app.util.isHttpUrl
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -561,18 +562,36 @@ class VoiceViewModel(
         val target = pendingHeadsUp
         pendingHeadsUp = null
         _followUpQuestion.value = null
+        val t = tts
         if (accepted && target != null) {
             val nudgeAt = target.reminderAt - HEADS_UP_LEAD_MS
-            reminderScheduler?.scheduleHeadsUp(target.captureId, target.content, nudgeAt)
-            // One short confirm, then the same SAVED screen.
-            val confirm = "Done — I'll nudge you before."
-            _reply.value = confirm
-            _phase.value = VoicePhase.REPLYING
-            val t = tts
-            if (t != null) {
-                t.speak(confirm) { finishToSaved() }
+            if (nudgeAt > System.currentTimeMillis()) {
+                reminderScheduler?.scheduleHeadsUp(target.captureId, target.content, nudgeAt)
+                android.util.Log.d(
+                    "FollowUp",
+                    "heads-up armed for capture ${target.captureId} at ${TimeFormat.full(nudgeAt)}",
+                )
+                // Say exactly when the nudge will fire so the user can verify it's set.
+                val confirm = "Done — I'll nudge you ${TimeFormat.dayTime(nudgeAt).lowercase().replace(", ", " at ")}."
+                _reply.value = confirm
+                _phase.value = VoicePhase.REPLYING
+                if (t != null) {
+                    t.speak(confirm) { finishToSaved() }
+                } else {
+                    viewModelScope.launch { delay(REPLY_PAUSE_MS); finishToSaved() }
+                }
             } else {
-                viewModelScope.launch { delay(REPLY_PAUSE_MS); finishToSaved() }
+                // The reminder is too close for a meaningful heads-up — never
+                // arm a past alarm. Say so plainly, then save as usual.
+                val leadMin = HEADS_UP_LEAD_MS / 60_000L
+                val confirm = "That's less than $leadMin minutes away — I'll just remind you at the time."
+                _reply.value = confirm
+                _phase.value = VoicePhase.REPLYING
+                if (t != null) {
+                    t.speak(confirm) { finishToSaved() }
+                } else {
+                    viewModelScope.launch { delay(REPLY_PAUSE_MS); finishToSaved() }
+                }
             }
         } else {
             finishToSaved()
@@ -724,9 +743,9 @@ class VoiceViewModel(
         /** How long to hold the reply on screen when no TTS engine exists. */
         private const val REPLY_PAUSE_MS = 1_200L
         /** The two-turn question after a reminder saves. */
-        private const val FOLLOW_UP_QUESTION = "Want me to remind you 15 minutes before?"
+        private const val FOLLOW_UP_QUESTION = "Want me to remind you 30 minutes before?"
         /** How early the heads-up nudge fires. */
-        private const val HEADS_UP_LEAD_MS = 15 * 60_000L
+        private const val HEADS_UP_LEAD_MS = 30 * 60_000L
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -739,12 +758,10 @@ class VoiceViewModel(
                     authState = app.container.authRepository.authState,
                     tts = BlurtTts(
                         context = app,
-                        geminiKeyProvider = { app.container.aiKeyStore.geminiKey() },
-                        packageName = app.packageName,
-                        certSha1 = app.container.signingCertSha1(app),
+                        fishKeyProvider = { app.container.aiKeyStore.fishKey() },
                     ),
                 )
             }
         }
     }
-}
+
