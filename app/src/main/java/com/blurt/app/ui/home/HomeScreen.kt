@@ -106,6 +106,8 @@ fun HomeScreen(
     }
 
     val idle = phase == VoicePhase.IDLE
+    val conversationActive by viewModel.conversationActive.collectAsStateWithLifecycle()
+    val turns by viewModel.turns.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -120,6 +122,27 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .weight(1f),
         ) {
+            if (conversationActive) {
+                // Conversation mode — smaller orb at top, thread below.
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(Modifier.height(BlurtSpacing.s))
+                    BlurtOrb(
+                        state = if (idle) OrbState.IDLE else OrbState.RECORDING,
+                        size = 100.dp,
+                        icon = BlurtIcons.BlurtMark,
+                        contentDescription = "Blurt",
+                    )
+                    VoiceCaptureFlow(
+                        viewModel = viewModel,
+                        onEdit = onCapture,
+                        onDone = { viewModel.dismissSaved() },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else {
             AnimatedContent(
                 targetState = idle,
                 transitionSpec = {
@@ -156,6 +179,7 @@ fun HomeScreen(
                         onDone = { viewModel.dismissSaved() },
                     )
                 }
+            }
             }
         }
     }

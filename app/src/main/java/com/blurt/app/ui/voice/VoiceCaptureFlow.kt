@@ -22,11 +22,16 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -76,6 +81,7 @@ import com.blurt.app.ui.components.rememberBlurtHaptics
 import com.blurt.app.ui.components.rememberBlurtInteractionSource
 import com.blurt.app.ui.theme.BlurtMotion
 import com.blurt.app.ui.theme.BlurtRadii
+import com.blurt.app.ui.theme.successColor
 import com.blurt.app.ui.theme.BlurtSpacing
 import com.blurt.app.ui.theme.rememberReduceMotion
 import com.blurt.app.util.TimeFormat
@@ -113,6 +119,8 @@ fun VoiceCaptureFlow(
     val savedReminderAt by viewModel.savedReminderAt.collectAsStateWithLifecycle()
     val savedCount by viewModel.savedCount.collectAsStateWithLifecycle()
     val editRequested by viewModel.editRequested.collectAsStateWithLifecycle()
+    val turns by viewModel.turns.collectAsStateWithLifecycle()
+    val conversationActive by viewModel.conversationActive.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val haptics = rememberBlurtHaptics()
@@ -137,6 +145,16 @@ fun VoiceCaptureFlow(
         if (granted) viewModel.save() else viewModel.saveWithoutReminder()
     }
 
+    Column(modifier = modifier) {
+        // In conversation mode, show the thread above the active turn.
+        if (conversationActive) {
+            ConversationThread(
+                turns = turns,
+                onEndConversation = viewModel::endConversation,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
     AnimatedContent(
         targetState = phase,
         transitionSpec = {
@@ -148,7 +166,7 @@ fun VoiceCaptureFlow(
             }
         },
         label = "voiceFlow",
-        modifier = modifier,
+        modifier = if (conversationActive) Modifier else modifier,
     ) { current ->
         when (current) {
             VoicePhase.LISTENING -> ListeningState(
@@ -217,7 +235,8 @@ fun VoiceCaptureFlow(
             VoicePhase.IDLE -> Unit // the caller renders its own resting orb
         }
     }
-}
+    } // Column
+} // VoiceCaptureFlow
 
 /**
  * Listening — the reference look: a quiet "Listening…" line, the live
@@ -946,6 +965,141 @@ private fun shareTranscript(context: Context, text: String) {
     }
     runCatching {
         context.startActivity(Intent.createChooser(send, "Share blurt"))
+    }
+}
+
+/** A scrollable thread of conversation turns — user bubbles, Blurt replies, saved blurts. */
+@Composable
+private fun ConversationThread(
+    turns: List<VoiceViewModel.ConversationTurn>,
+    onEndConversation: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+
+    // Auto-scroll to the latest turn.
+    LaunchedEffect(turns.size) {
+        if (turns.isNotEmpty()) {
+            listState.animateScrollToItem(turns.size - 1)
+        }
+    }
+
+    Column(modifier = modifier) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = BlurtSpacing.grouped, vertical = BlurtSpacing.m),
+            modifier = Modifier.weight(1f),
+        ) {
+            items(turns) { turn ->
+                ConversationTurnCard(turn = turn)
+            }
+        }
+        // End conversation button — quiet, at the bottom.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            val endSource = rememberBlurtInteractionSource()
+            TextButton(
+                onClick = onEndConversation,
+                interactionSource = endSource,
+                modifier = Modifier.blurtPressScale(endSource),
+            ) {
+                Text("End conversation", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** One turn in the conversation — user said (right), Blurt replied (left), saved card (if saved). */
+@Composable
+private fun ConversationTurnCard(turn: VoiceViewModel.ConversationTurn) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        // User said — right-aligned bubble.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Surface(
+                shape = RoundedCornerShape(BlurtRadii.m, BlurtRadii.m, 4.dp, BlurtRadii.m),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.widthIn(max = 300.dp),
+            ) {
+                Text(
+                    text = turn.userText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+        }
+
+        // Blurt replied — left-aligned bubble.
+        if (!turn.replyText.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(BlurtRadii.m, BlurtRadii.m, BlurtRadii.m, 4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.widthIn(max = 300.dp),
+                ) {
+                    Text(
+                        text = turn.replyText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+        }
+
+        // Saved blurt card — a quiet confirmation line.
+        if (turn.savedCaptureId != null) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(BlurtRadii.m),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = BlurtIcons.Check,
+                            contentDescription = null,
+                            tint = successColor(),
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Saved",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (turn.savedReminderAt != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                imageVector = BlurtIcons.Bell,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(11.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

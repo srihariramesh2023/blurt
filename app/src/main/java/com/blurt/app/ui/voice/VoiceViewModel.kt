@@ -148,6 +148,22 @@ class VoiceViewModel(
     /** The companion's save decision, applied when its reply finishes. */
     private var pendingSave = true
 
+    // --- Conversation mode (continuous voice loop) ---------------------------
+
+    /** The conversation thread — every exchange in this session. */
+    private val _turns = MutableStateFlow<List<ConversationTurn>>(emptyList())
+    val turns: StateFlow<List<ConversationTurn>> = _turns.asStateFlow()
+
+    /** Whether we're in a continuous conversation (orb stays active, loop instead of ending). */
+    private val _conversationActive = MutableStateFlow(false)
+    val conversationActive: StateFlow<Boolean> = _conversationActive.asStateFlow()
+
+    /** The transcript of the current turn being built (before it becomes a ConversationTurn). */
+    private var currentTurnUserText: String = ""
+
+    /** The reply text of the current turn (before it becomes a ConversationTurn). */
+    private var currentTurnReplyText: String? = null
+
     /** The follow-up question asked after a reminder auto-saves. */
     private val _followUpQuestion = MutableStateFlow<String?>(null)
     val followUpQuestion: StateFlow<String?> = _followUpQuestion.asStateFlow()
@@ -164,6 +180,7 @@ class VoiceViewModel(
     fun onMicTapped() {
         _error.value = null
         _notice.value = null
+        _conversationActive.value = true
         // isRecognitionAvailable() is unreliable on some OEM builds (it can
         // fail even when the Google speech service resolves fine), so resolve
         // the recognizer action ourselves — the same thing the API does, minus
@@ -292,6 +309,18 @@ class VoiceViewModel(
         if (_phase.value != VoicePhase.REPLYING) return
         if (pendingSave && pendingAnalyses.isNotEmpty()) {
             autoSave()
+        } else if (_conversationActive.value) {
+            // Nothing worth keeping — but conversation is active, so add a turn and loop.
+            val turn = ConversationTurn(
+                userText = _transcript.value.trim(),
+                replyText = _reply.value,
+            )
+            _turns.value = _turns.value + turn
+            _transcript.value = ""
+            _reply.value = null
+            _analysis.value = null
+            pendingAnalyses = emptyList()
+            startListening()
         } else {
             // Nothing worth keeping — the transcript is dropped, not saved.
             reset()
@@ -380,6 +409,20 @@ class VoiceViewModel(
                 // Saved with a reminder — keep the conversation going.
                 pendingSavedId = ids.first()
                 askFollowUp(target)
+            } else if (_conversationActive.value) {
+                // Conversation mode — append turn and loop back to listening.
+                val turn = ConversationTurn(
+                    userText = _transcript.value.trim(),
+                    replyText = _reply.value,
+                    savedCaptureId = ids.first(),
+                    savedReminderAt = firstReminderAt,
+                )
+                _turns.value = _turns.value + turn
+                _transcript.value = ""
+                _reply.value = null
+                _analysis.value = null
+                pendingAnalyses = emptyList()
+                startListening()
             } else {
                 _phase.value = VoicePhase.SAVED
                 _saved.value = ids.first()
@@ -393,7 +436,13 @@ class VoiceViewModel(
         val content: String,
         val reminderAt: Long,
     )
-
+    /** One exchange in the conversation thread — what the user said, what Blurt replied, and what got saved. */
+    data class ConversationTurn(
+        val userText: String,
+        val replyText: String?,
+        val savedCaptureId: Long? = null,
+        val savedReminderAt: Long? = null,
+    )
     /** One blurt's worth of save data — what actually hits the database. */
     private data class SaveBlurt(
         val content: String,
@@ -424,6 +473,12 @@ class VoiceViewModel(
         reset()
     }
 
+    /** End the conversation gracefully — stops everything and goes back to idle. */
+    fun endConversation() {
+        tts?.stop()
+        recognizer?.cancel()
+        reset()
+    }
     fun clearError() {
         _error.value = null
     }
@@ -444,6 +499,11 @@ class VoiceViewModel(
         _error.value = null
         _notice.value = null
         _savedReminderAt.value = null
+        // Conversation mode — clear the thread and deactivate.
+        _turns.value = emptyList()
+        _conversationActive.value = false
+        currentTurnUserText = ""
+        currentTurnReplyText = null
     }
 
     private fun onTranscript(text: String) {
@@ -599,10 +659,27 @@ class VoiceViewModel(
     }
 
     private fun finishToSaved() {
-        _reply.value = null
-        _phase.value = VoicePhase.SAVED
-        pendingSavedId?.let { _saved.value = it }
+        val replyText = _reply.value
+        val savedId = pendingSavedId
         pendingSavedId = null
+        _reply.value = null
+        if (_conversationActive.value) {
+            // Conversation mode — append the turn and loop back to listening.
+            val turn = ConversationTurn(
+                userText = _transcript.value.trim(),
+                replyText = replyText,
+                savedCaptureId = savedId,
+                savedReminderAt = _savedReminderAt.value,
+            )
+            _turns.value = _turns.value + turn
+            _transcript.value = ""
+            _analysis.value = null
+            _savedReminderAt.value = null
+            startListening()
+        } else {
+            _phase.value = VoicePhase.SAVED
+            savedId?.let { _saved.value = it }
+        }
     }
 
     /** The board's error state: \"Try Again\" re-runs classification. */
@@ -764,4 +841,4 @@ class VoiceViewModel(
             }
         }
     }
-
+}
