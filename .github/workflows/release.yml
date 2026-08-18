@@ -38,16 +38,15 @@ jobs:
       # password/alias secrets — stable forever, set once in repo Settings →
       # Secrets and variables → Actions.
       # Fallback (zero setup): generate a keystore once and keep it in the
-      # Actions cache so signing stays stable across releases. The password
-      # below is a documented stopgap; switch to the secret for production.
+      # Actions cache so signing stays stable across releases.
       - name: Decode keystore from secret
-        if: env.BLURT_KEYSTORE_BASE64 != ''
+        if: ${{ secrets.BLURT_KEYSTORE_BASE64 != '' }}
         env:
           BLURT_KEYSTORE_BASE64: ${{ secrets.BLURT_KEYSTORE_BASE64 }}
         run: echo "$BLURT_KEYSTORE_BASE64" | base64 -d > keystore.jks
 
       - name: Restore keystore from cache
-        if: env.BLURT_KEYSTORE_BASE64 == ''
+        if: ${{ secrets.BLURT_KEYSTORE_BASE64 == '' }}
         id: keystore-cache
         uses: actions/cache@v4
         with:
@@ -55,7 +54,7 @@ jobs:
           key: blurt-keystore-${{ github.repository }}
 
       - name: Generate keystore
-        if: env.BLURT_KEYSTORE_BASE64 == '' && steps.keystore-cache.outputs.cache-hit != 'true'
+        if: ${{ steps.keystore-cache.outputs.cache-hit != 'true' }}
         run: |
           keytool -genkeypair -v \
             -keystore keystore.jks \
@@ -71,7 +70,10 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.BLURT_KEYSTORE_PASSWORD || 'blurt-release-signing' }}
           KEY_ALIAS: ${{ secrets.BLURT_KEY_ALIAS || 'blurt' }}
           KEY_PASSWORD: ${{ secrets.BLURT_KEY_PASSWORD || 'blurt-release-signing' }}
-        run: ./gradlew assembleRelease
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx2048m -Dfile.encoding=UTF-8"
 
       - name: Verify APK signature
         run: |
