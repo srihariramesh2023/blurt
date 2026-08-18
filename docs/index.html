@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blurt — A voice assistant that listens, then forgets</title>
+  <meta name="description" content="Blurt is a voice assistant that lives life with you. Talk to it, it saves what matters, and deliberately forgets the rest.">
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #e4e4e7;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #a78bfa; text-decoration: none; }
+    a:hover { color: #c4b5fd; }
+
+    /* ── Layout ───────────────────────────────────────────────────── */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; }
+
+    /* ── Nav ──────────────────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(167, 139, 250, 0.1);
+    }
+    nav .container {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      font-size: 20px; font-weight: 700; color: #e4e4e7;
+      letter-spacing: -0.5px;
+    }
+    .nav-logo span { color: #a78bfa; }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-links a {
+      font-size: 14px; color: #a1a1aa; transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #e4e4e7; }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      text-align: center; padding-top: 64px;
+    }
+    .hero h1 {
+      font-size: clamp(40px, 7vw, 72px);
+      font-weight: 800; letter-spacing: -2px;
+      line-height: 1.05; margin-bottom: 20px;
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, #7c3aed, #a78bfa, #c084fc);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .tagline {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: #a1a1aa; max-width: 520px; margin: 0 auto 36px;
+    }
+    .hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px; font-size: 15px;
+      font-weight: 600; cursor: pointer; border: none;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: #fff;
+      box-shadow: 0 4px 24px rgba(124, 58, 237, 0.3);
+    }
+    .btn-primary:hover { box-shadow: 0 6px 32px rgba(124, 58, 237, 0.45); }
+    .btn-secondary {
+      background: rgba(167, 139, 250, 0.1);
+      color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.2);
+    }
+    .btn-secondary:hover { background: rgba(167, 139, 250, 0.15); }
+
+    /* ── Orb Animation ────────────────────────────────────────────── */
+    .orb-wrapper {
+      width: 180px; height: 180px; margin: 0 auto 48px;
+      position: relative;
+    }
+    .orb {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #a78bfa, #7c3aed 50%, #4c1d95);
+      box-shadow: 0 0 60px rgba(124, 58, 237, 0.4), 0 0 120px rgba(124, 58, 237, 0.15);
+      animation: pulse 3s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 60px rgba(124, 58, 237, 0.4); }
+      50% { transform: scale(1.04); box-shadow: 0 0 80px rgba(124, 58, 237, 0.55); }
+    }
+
+    /* ── Demo Section ─────────────────────────────────────────────── */
+    .demo { text-align: center; }
+    .demo h2 {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 700;
+      letter-spacing: -1px; margin-bottom: 12px;
+    }
+    .demo .subtitle { color: #a1a1aa; margin-bottom: 40px; font-size: 16px; }
+    .demo-video {
+      position: relative; width: 100%; max-width: 380px;
+      margin: 0 auto; aspect-ratio: 9/16;
+      border-radius: 24px; overflow: hidden;
+      background: #18181b;
+      border: 1px solid rgba(167, 139, 250, 0.15);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.5);
+    }
+    .demo-video .placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #52525b; font-size: 14px; gap: 12px;
+    }
+    .demo-video .placeholder .play-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: rgba(167, 139, 250, 0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; color: #a78bfa;
+    }
+    .demo-video video {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+
+    /* ── Features ─────────────────────────────────────────────────── */
+    .features h2 {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 700;
+      letter-spacing: -1px; text-align: center; margin-bottom: 48px;
+    }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: rgba(24, 24, 27, 0.6);
+      border: 1px solid rgba(167, 139, 250, 0.08);
+      border-radius: 16px; padding: 28px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .feature-card:hover {
+      border-color: rgba(167, 139, 250, 0.2);
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      font-size: 28px; margin-bottom: 14px; display: block;
+    }
+    .feature-card h3 {
+      font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #e4e4e7;
+    }
+    .feature-card p { font-size: 14px; color: #a1a1aa; line-height: 1.5; }
+
+    /* ── How It Works ─────────────────────────────────────────────── */
+    .how { text-align: center; }
+    .how h2 {
+      font-size: clamp(28px, 4vw, 40px); font-weight: 700;
+      letter-spacing: -1px; margin-bottom: 48px;
+    }
+    .steps {
+      display: flex; flex-direction: column; gap: 32px;
+      max-width: 560px; margin: 0 auto; text-align: left;
+    }
+    .step {
+      display: flex; gap: 18px; align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0; width: 40px; height: 40px;
+      border-radius: 12px;
+      background: rgba(124, 58, 237, 0.15);
+      color: #a78bfa; font-weight: 700; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-text h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .step-text p { font-size: 14px; color: #a1a1aa; }
+
+    /* ── Privacy / BYOK ───────────────────────────────────────────── */
+    .privacy { text-align: center; }
+    .privacy-box {
+      background: rgba(24, 24, 27, 0.6);
+      border: 1px solid rgba(167, 139, 250, 0.1);
+      border-radius: 20px; padding: 48px 32px;
+      max-width: 600px; margin: 0 auto;
+    }
+    .privacy-box h2 {
+      font-size: 28px; font-weight: 700; margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+    .privacy-box p { color: #a1a1aa; font-size: 15px; margin-bottom: 20px; }
+    .privacy-box .keys {
+      display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+    }
+    .key-badge {
+      padding: 8px 16px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; background: rgba(167, 139, 250, 0.1);
+      color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.15);
+    }
+
+    /* ── CTA ──────────────────────────────────────────────────────── */
+    .cta { text-align: center; padding: 100px 0; }
+    .cta h2 {
+      font-size: clamp(32px, 5vw, 48px); font-weight: 800;
+      letter-spacing: -1.5px; margin-bottom: 16px;
+    }
+    .cta p { color: #a1a1aa; margin-bottom: 32px; font-size: 16px; }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid rgba(167, 139, 250, 0.08);
+      padding: 32px 0; text-align: center;
+      font-size: 13px; color: #52525b;
+    }
+    footer a { color: #71717a; }
+    footer a:hover { color: #a78bfa; }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      section { padding: 56px 0; }
+      .nav-links { gap: 16px; }
+      .features-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="container">
+    <div class="nav-logo"><span>●</span> blurt</div>
+    <div class="nav-links">
+      <a href="#demo">Demo</a>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/srihariramesh2023/blurt" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="orb-wrapper"><div class="orb"></div></div>
+    <h1>A voice assistant that<br><span class="gradient">listens, then forgets.</span></h1>
+    <p class="tagline">Talk to Blurt like a friend. It saves what matters — meetings, tasks, ideas — and deliberately forgets the rest. No clutter. No noise.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/srihariramesh2023/blurt/releases" class="btn btn-primary" target="_blank">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download APK
+      </a>
+      <a href="https://github.com/srihariramesh2023/blurt" class="btn btn-secondary" target="_blank">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        View Source
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Demo -->
+<section class="demo" id="demo">
+  <div class="container">
+    <h2>See it in action</h2>
+    <p class="subtitle">Tap the orb. Talk. Blurt listens, saves what matters, replies out loud.</p>
+    <div class="demo-video">
+      <!-- Replace src with your screen recording -->
+      <video controls playsinline preload="metadata" poster="">
+        <source src="demo.mp4" type="video/mp4">
+      </video>
+      <div class="placeholder" id="video-placeholder">
+        <div class="play-icon">▶</div>
+        <span>Demo video coming soon</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <h2>What Blurt does</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🎙️</span>
+        <h3>Voice-first conversation</h3>
+        <p>Tap the orb and just talk. No buttons, no forms. Blurt keeps listening — the conversation flows until you say stop.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🧠</span>
+        <h3>Remembers what matters</h3>
+        <p>"Meeting with Sarah tomorrow at 3" becomes a reminder with a heads-up nudge 30 minutes before. "Call mom Friday" — saved.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🫥</span>
+        <h3>Forgets on purpose</h3>
+        <p>Vent about your boss and Blurt acknowledges you — then deliberately forgets. No receipts. No history. Just a friend who listens.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔊</span>
+        <h3>Speaks like a human</h3>
+        <p>Neural voice via Fish Audio — natural, fast, conversational. Falls back to your device voice when offline.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔔</span>
+        <h3>Smart reminders</h3>
+        <p>Priority notifications with heads-up banners. Optional 30-minute early nudge. Recurring daily or weekly. Survives reboots.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔒</span>
+        <h3>Zero secrets. Your keys.</h3>
+        <p>BYOK — paste your own free API keys (Groq, Gemini, Fish). Stored encrypted on-device. The APK ships with nothing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section class="how" id="how">
+  <div class="container">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h3>Tap the orb</h3>
+          <p>Blurt starts listening. No menus, no setup — just press and speak.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h3>Speak naturally</h3>
+          <p>Say anything — a reminder, a thought, a vent. Blurt understands context, extracts times, and classifies intent.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h3>Blurt replies out loud</h3>
+          <p>A natural voice confirms what it saved. "Done — I'll nudge you at 2:30 pm." The conversation keeps going.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <h3>It remembers, or it forgets</h3>
+          <p>Important stuff gets saved with smart categories and reminders. Venting? Blurt listens and lets it go. You decide what sticks.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Privacy -->
+<section class="privacy">
+  <div class="container">
+    <div class="privacy-box">
+      <h2>Your data stays yours</h2>
+      <p>Blurt ships zero API keys. You bring your own — stored encrypted in the Android Keystore, never leaving your device. No servers. No tracking. No subscriptions.</p>
+      <div class="keys">
+        <span class="key-badge">Groq — classification</span>
+        <span class="key-badge">Gemini — search &amp; voice</span>
+        <span class="key-badge">Fish Audio — neural TTS</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="container">
+    <h2>Try Blurt</h2>
+    <p>Free. Open source. No ads. No accounts required.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/srihariramesh2023/blurt/releases" class="btn btn-primary" target="_blank">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download APK
+      </a>
+      <a href="https://github.com/srihariramesh2023/blurt" class="btn btn-secondary" target="_blank">Star on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <p>Built with Kotlin &amp; Jetpack Compose · <a href="https://github.com/srihariramesh2023/blurt" target="_blank">GitHub</a> · MIT License</p>
+  </div>
+</footer>
+
+<script>
+  // Hide placeholder when video has source
+  const video = document.querySelector('.demo-video video');
+  const placeholder = document.getElementById('video-placeholder');
+  if (video && placeholder) {
+    video.addEventListener('play', () => placeholder.style.display = 'none');
+    if (video.src) placeholder.style.display = 'none';
+  }
+</script>
+
+</body>
+</html>
